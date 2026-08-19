@@ -481,3 +481,216 @@ body.is-fullscreen .app { max-width: none; }
 
 .cam__error p { margin: 0 0 var(--sp-2); }
 .cam__error .btn { min-height: 48px; font-size: var(--fs-sm); }
+
+
+/* =========================================================
+   ধাপ ৩ — বিশ্লেষণ, নিশ্চিতকরণ, ফলাফল
+   ========================================================= */
+
+/* ---------- বিশ্লেষণ ---------- */
+.analyzing {
+  text-align: center;
+  padding-top: 18vh;
+}
+.analyzing__ring {
+  width: 68px; height: 68px;
+  margin: 0 auto var(--sp-3);
+  border: 6px solid var(--line);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: camspin .9s linear infinite;
+}
+.analyzing__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  margin: 0;
+}
+.analyzing__note { color: var(--ink-soft); font-size: var(--fs-sm); margin: 4px 0 0; }
+
+/* ---------- নিশ্চিতকরণ ---------- */
+.confirm__q {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  text-align: center;
+  margin: var(--sp-3) 0 var(--sp-1);
+}
+.confirm__hint {
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--sp-3);
+  line-height: 1.5;
+}
+
+.confirm__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.confirm__side { margin: 0; }
+.confirm__side img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--line);
+  box-shadow: var(--shadow);
+}
+.confirm__side figcaption {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--ink-soft);
+  margin-top: 6px;
+  font-weight: 600;
+}
+.confirm__missing {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--ink-soft);
+}
+
+.confirm__actions { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+/* ---------- ফলাফল ---------- */
+.result__img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  background: var(--line);
+  display: block;
+}
+
+.verdict { padding: var(--sp-3); }
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.disease {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--fs-2xl);
+  margin: 0;
+  line-height: 1.15;
+}
+.disease-en { font-size: var(--fs-xs); color: var(--ink-soft); margin: 2px 0 0; }
+
+.meter { margin-top: var(--sp-3); }
+.meter__track {
+  height: 14px;
+  border-radius: 8px;
+  background: var(--line);
+  overflow: hidden;
+}
+.meter__fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 8px;
+  transition: width .6s cubic-bezier(.2,.7,.3,1);
+}
+.meter__nums {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: var(--fs-xs);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.banner {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.banner--ok   { background: var(--green-pale);  color: var(--green-dark); border-left: 5px solid var(--green); }
+.banner--warn { background: var(--flower-pale); color: #6B4A0E;           border-left: 5px solid var(--flower); }
+.banner--stop { background: var(--maroon-pale); color: var(--maroon);     border-left: 5px solid var(--maroon); }
+
+.speak {
+  width: 100%;
+  margin-top: var(--sp-3);
+  min-height: var(--tap-min);
+  border: 2px solid var(--green);
+  background: var(--card);
+  color: var(--green-dark);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.speak svg { width: 22px; height: 22px; }
+.speak.is-on { background: var(--green); color: #fff; }
+
+.block {
+  border-top: 2px solid var(--line);
+  padding: var(--sp-3);
+}
+.block h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-base);
+  margin: 0 0 var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.block h3 .dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--flower);
+  flex: 0 0 9px;
+}
+.block ul { margin: 0; padding-left: 22px; }
+.block li { margin-bottom: 8px; }
+.block li:last-child { margin-bottom: 0; }
+
+.chem {
+  background: var(--paper);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+}
+.chem p { margin: 0 0 6px; }
+.chem__warn {
+  display: block;
+  margin-top: 8px;
+  font-size: var(--fs-xs);
+  color: var(--maroon);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.result__actions {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-top: 2px solid var(--line);
+}
+.result__actions .btn { flex: 1; }
+
+@media (min-width: 1024px) {
+  #screen-result .container,
+  #screen-confirm .container,
+  #screen-analyzing .container { max-width: 520px; margin: 0 auto; }
+}

@@ -2,6 +2,8 @@
    ধাপ ২ — স্ক্রিন সুইচিং + ক্যামেরা সংযোগ
    ========================================================= */
 import { startCamera, stopCamera, captureFrame, readFile, hasTorch, toggleTorch, cameraErrorMessage, isRunning } from './camera.js';
+import { predict, decide, nextCandidate, loadModel } from './predict.js';
+import { loadTreatments, getDisease, renderResult, toBn } from './result.js';
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 /* সর্বশেষ তোলা ছবি — ধাপ ৩ এ মডেলে যাবে */
@@ -122,10 +124,13 @@ function wire() {
         void onPickFile(f);
         e.target.value = '';
     });
-    // ধাপ ৩ এ এখানে মডেল বসবে
-    $('btnUsePhoto')?.addEventListener('click', () => {
-        alert('ছবি গৃহীত। মডেল সংযোজন ধাপ ৩ ও ৫ এ আসছে।');
-    });
+    $('btnUsePhoto')?.addEventListener('click', () => void runAnalysis());
+    $('btnAgain')?.addEventListener('click', () => void goTo('camera'));
+    $('btnOfficer')?.addEventListener('click', showOfficer);
+    $('btnSpeak')?.addEventListener('click', () => alert('ভয়েস ধাপ ৪ এ আসছে।'));
+    $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
+    $('btnConfirmNo')?.addEventListener('click', () => onConfirm('no'));
+    $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
 }
 /* ---------------- ভয়েস টগল (ধাপ ৪ এ কাজ করবে) ---------------- */
 let voiceEnabled = true;
@@ -148,11 +153,121 @@ function fillWeatherPlaceholder() {
     if (s)
         s.textContent = 'উপযুক্ত';
 }
+/* =========================================================
+   বিশ্লেষণ ও ফলাফল
+   ========================================================= */
+let currentPrediction = null;
+let currentVerdict = null;
+let rejected = [];
+let spokenText = '';
+function targets() {
+    return {
+        name: $('rName'),
+        nameEn: $('rNameEn'),
+        fill: $('rFill'),
+        pct: $('rPct'),
+        banner: $('rBanner'),
+        symptoms: $('rSymptoms'),
+        actions: $('rAction'),
+        chemical: $('rChem')
+    };
+}
+async function runAnalysis() {
+    if (!lastShot)
+        return;
+    rejected = [];
+    await goTo('analyzing');
+    const img = new Image();
+    img.src = lastShot.dataUrl;
+    await img.decode().catch(() => { });
+    currentPrediction = await predict(img);
+    currentVerdict = decide(currentPrediction);
+    if (currentVerdict.kind === 'confirm') {
+        showConfirm(currentVerdict.candidate);
+    }
+    else {
+        showResult();
+    }
+}
+/* ---------------- নিশ্চিতকরণ ---------------- */
+function showConfirm(key) {
+    const d = getDisease(key);
+    if (!d || !lastShot) {
+        showResult();
+        return;
+    }
+    const mine = $('confirmMine');
+    const ref = $('confirmRef');
+    const q = $('confirmQ');
+    const hint = $('confirmHint');
+    if (mine)
+        mine.src = lastShot.dataUrl;
+    if (ref) {
+        ref.src = d.referenceImage;
+        ref.onerror = () => {
+            ref.classList.add('hidden');
+            $('confirmRefMissing')?.classList.remove('hidden');
+        };
+        ref.onload = () => {
+            ref.classList.remove('hidden');
+            $('confirmRefMissing')?.classList.add('hidden');
+        };
+    }
+    if (q)
+        q.textContent = `আপনার পাতা কি ${d.bn} এর মতো?`;
+    if (hint)
+        hint.textContent = d.lookFor ?? 'দুটি ছবি মিলিয়ে দেখুন।';
+    void goTo('confirm');
+}
+function onConfirm(answer) {
+    if (!currentPrediction || !currentVerdict || currentVerdict.kind !== 'confirm')
+        return;
+    if (answer === 'yes') {
+        showResult(currentVerdict.candidate);
+        return;
+    }
+    if (answer === 'idk') {
+        currentVerdict = { kind: 'too_low', prediction: currentPrediction };
+        showResult();
+        return;
+    }
+    // "না" — পরের সম্ভাবনা
+    rejected.push(currentVerdict.candidate);
+    const next = nextCandidate(currentPrediction, rejected);
+    if (next) {
+        currentVerdict = { kind: 'confirm', prediction: currentPrediction, candidate: next };
+        showConfirm(next);
+    }
+    else {
+        currentVerdict = { kind: 'too_low', prediction: currentPrediction };
+        showResult();
+    }
+}
+/* ---------------- ফলাফল ---------------- */
+function showResult(confirmedKey) {
+    if (!currentVerdict)
+        return;
+    const img = $('resultImg');
+    if (img && lastShot)
+        img.src = lastShot.dataUrl;
+    spokenText = renderResult(targets(), currentVerdict, confirmedKey);
+    void goTo('result');
+}
+function showOfficer() {
+    alert('উপজেলা কৃষি অফিসে যোগাযোগ করুন।\nকৃষি কল সেন্টার: ' + toBn(16123));
+}
 /* ---------------- চালু ---------------- */
-function init() {
+async function init() {
     wire();
     wireVoice();
     fillWeatherPlaceholder();
+    try {
+        await loadTreatments();
+        await loadModel();
+    }
+    catch {
+        alert('রোগের তথ্য লোড করা যায়নি। ইন্টারনেট সংযোগ দেখুন।');
+    }
     /* ট্যাব লুকালে ক্যামেরা ছেড়ে দাও, ফিরে এলে আবার ধরো।
        না ছাড়লে অন্য ট্যাব/অ্যাপ ক্যামেরা পায় না। */
     document.addEventListener('visibilitychange', () => {
@@ -178,4 +293,4 @@ function init() {
     });
     console.log('✅ ধাপ ২ চালু হয়েছে');
 }
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => void init());

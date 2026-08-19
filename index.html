@@ -106,7 +106,7 @@
             <span>ছবি তুলুন</span>
           </span>
         </button>
-        <p class="hint">একটি পাতা পুরো ফ্রেমে ভরে ছবি তুলুন।<br>দাগ যেন পরিষ্কার দেখা যায়।</p>
+        <p class="hint">একটি পাতা হাতে ধরে কাছ থেকে ছবি তুলুন।।<br>দাগ যেন পরিষ্কার দেখা যায়।</p>
         <button class="btn btn--ghost" id="btnGalleryHome" style="max-width:280px;margin:14px auto 0;">গ্যালারি থেকে নিন</button>
       </div>
     </div>
@@ -206,6 +206,90 @@
         <button class="btn btn--ghost" id="btnRetake">আবার তুলুন</button>
         <button class="btn btn--primary" id="btnUsePhoto">হ্যাঁ, এগিয়ে যান</button>
       </div>
+    </div>
+  </section>
+
+
+  <!-- ================= বিশ্লেষণ চলছে ================= -->
+  <section class="screen hidden" id="screen-analyzing">
+    <div class="container analyzing">
+      <div class="analyzing__ring"></div>
+      <p class="analyzing__title">ছবি দেখা হচ্ছে…</p>
+      <p class="analyzing__note">কয়েক সেকেন্ড অপেক্ষা করুন</p>
+    </div>
+  </section>
+
+  <!-- ================= নিশ্চিতকরণ ================= -->
+  <section class="screen hidden" id="screen-confirm">
+    <div class="container">
+      <p class="confirm__q" id="confirmQ">আপনার পাতা কি এমন?</p>
+      <p class="confirm__hint" id="confirmHint"></p>
+
+      <div class="confirm__pair">
+        <figure class="confirm__side">
+          <img id="confirmMine" alt="আপনার ছবি">
+          <figcaption>আপনার ছবি</figcaption>
+        </figure>
+        <figure class="confirm__side">
+          <img id="confirmRef" alt="নমুনা ছবি">
+          <div class="confirm__missing hidden" id="confirmRefMissing">
+            নমুনা ছবি এখনো যোগ করা হয়নি
+          </div>
+          <figcaption>নমুনা ছবি</figcaption>
+        </figure>
+      </div>
+
+      <div class="confirm__actions">
+        <button class="btn btn--primary" id="btnConfirmYes">হ্যাঁ, এমনই</button>
+        <button class="btn btn--ghost"   id="btnConfirmNo">না, আলাদা</button>
+        <button class="btn btn--ghost"   id="btnConfirmIdk">বুঝতে পারছি না</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ফলাফল ================= -->
+  <section class="screen hidden" id="screen-result">
+    <div class="container">
+      <div class="card">
+        <img class="result__img" id="resultImg" alt="তোলা ছবি">
+
+        <div class="verdict">
+          <p class="eyebrow">সম্ভাব্য রোগ</p>
+          <h2 class="disease" id="rName">—</h2>
+          <p class="disease-en" id="rNameEn">—</p>
+
+          <div class="meter">
+            <div class="meter__track"><span class="meter__fill" id="rFill"></span></div>
+            <div class="meter__nums">
+              <span>নিশ্চয়তা</span>
+              <span id="rPct">—</span>
+            </div>
+          </div>
+
+          <div class="banner" id="rBanner">—</div>
+
+          <button class="speak" id="btnSpeak">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+            </svg>
+            শুনুন
+          </button>
+        </div>
+
+        <div id="rSymptoms" class="block"></div>
+        <div id="rAction"   class="block"></div>
+        <div id="rChem"     class="block"></div>
+
+        <div class="result__actions">
+          <button class="btn btn--primary" id="btnAgain">আরেকটি ছবি</button>
+          <button class="btn btn--ghost"   id="btnOfficer">অফিসারকে দেখান</button>
+        </div>
+      </div>
+
+      <p class="disclaimer">
+        ⚠️ এটি সহায়ক পরামর্শ, চূড়ান্ত সিদ্ধান্ত নয়।<br>
+        <strong>ওষুধ দেওয়ার আগে উপজেলা কৃষি অফিসারের পরামর্শ নিন।</strong>
+      </p>
     </div>
   </section>
 
