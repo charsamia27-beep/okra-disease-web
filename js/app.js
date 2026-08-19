@@ -1,50 +1,110 @@
-"use strict";
 /* =========================================================
-   ধাপ ১ — শুধু স্ক্রিন সুইচিং ও বোতাম সংযোগ
-   পরের ধাপে ক্যামেরা যোগ হবে
+   ধাপ ২ — স্ক্রিন সুইচিং + ক্যামেরা সংযোগ
    ========================================================= */
+import { startCamera, stopCamera, captureFrame, readFile, hasTorch, toggleTorch, cameraErrorMessage } from './camera.js';
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-/* ---------- স্ক্রিন বদল ---------- */
-function goTo(name) {
-    // এখন শুধু হোম আছে। পরের ধাপে বাকিগুলো যোগ হবে।
-    const screens = $$('.screen');
-    screens.forEach(s => s.classList.add('hidden'));
+/* সর্বশেষ তোলা ছবি — ধাপ ৩ এ মডেলে যাবে */
+let lastShot = null;
+/* ---------------- স্ক্রিন বদল ---------------- */
+async function goTo(name) {
+    // ক্যামেরা ছেড়ে গেলে বন্ধ করো — নাহলে ব্যাটারি খায়, বাতি জ্বলে থাকে
+    if (name !== 'camera')
+        stopCamera();
     const target = $(`screen-${name}`);
-    if (target) {
-        target.classList.remove('hidden');
-    }
-    else {
-        console.log(`স্ক্রিন এখনো তৈরি হয়নি: ${name}`);
+    if (!target) {
         alert(`"${name}" স্ক্রিন এখনো তৈরি হয়নি — পরের ধাপে আসছে।`);
-        const home = $('screen-home');
-        if (home)
-            home.classList.remove('hidden');
         return;
     }
-    // নিচের নেভে হাইলাইট
-    $$('.nav__item').forEach(item => {
-        item.classList.toggle('is-active', item.dataset.go === name);
-    });
+    $$('.screen').forEach(s => s.classList.add('hidden'));
+    target.classList.remove('hidden');
+    // ক্যামেরা স্ক্রিনে হেডার/নেভ লুকাও
+    const full = name === 'camera';
+    $('appHeader')?.classList.toggle('hidden', full);
+    $('appNav')?.classList.toggle('hidden', full);
+    document.body.classList.toggle('is-fullscreen', full);
+    $$('.nav__item').forEach(i => i.classList.toggle('is-active', i.dataset.go === name));
     window.scrollTo(0, 0);
+    if (name === 'camera')
+        await openCamera();
 }
-/* ---------- বোতাম সংযোগ ---------- */
-function wireButtons() {
-    $$('[data-go]').forEach(el => {
-        el.addEventListener('click', () => {
-            const name = el.dataset.go;
-            if (name)
-                goTo(name);
-        });
-    });
-    const start = $('btnStart');
-    if (start) {
-        start.addEventListener('click', () => goTo('camera'));
+/* ---------------- ক্যামেরা ---------------- */
+async function openCamera() {
+    const video = $('camVideo');
+    const err = $('camError');
+    const torch = $('btnTorch');
+    if (!video)
+        return;
+    err?.classList.add('hidden');
+    try {
+        await startCamera(video);
+        torch?.classList.toggle('hidden', !hasTorch());
+    }
+    catch (e) {
+        if (err) {
+            err.textContent = cameraErrorMessage(e);
+            err.classList.remove('hidden');
+        }
+        torch?.classList.add('hidden');
     }
 }
-/* ---------- ভয়েস চালু/বন্ধ (এখন শুধু টগল) ---------- */
+async function onShutter() {
+    const video = $('camVideo');
+    if (!video)
+        return;
+    try {
+        lastShot = await captureFrame(video);
+        showPreview(lastShot.dataUrl);
+    }
+    catch {
+        alert('ছবি তোলা যায়নি। আবার চেষ্টা করুন।');
+    }
+}
+async function onPickFile(file) {
+    if (!file)
+        return;
+    try {
+        lastShot = await readFile(file);
+        showPreview(lastShot.dataUrl);
+    }
+    catch {
+        alert('ছবিটি পড়া যায়নি। অন্য ছবি বেছে নিন।');
+    }
+}
+function showPreview(dataUrl) {
+    const img = $('previewImg');
+    if (img)
+        img.src = dataUrl;
+    void goTo('preview');
+}
+/* ---------------- বোতাম সংযোগ ---------------- */
+function wire() {
+    $$('[data-go]').forEach(el => el.addEventListener('click', () => void goTo(el.dataset.go)));
+    $('btnStart')?.addEventListener('click', () => void goTo('camera'));
+    $('btnShutter')?.addEventListener('click', () => void onShutter());
+    $('btnCamClose')?.addEventListener('click', () => void goTo('home'));
+    $('btnRetake')?.addEventListener('click', () => void goTo('camera'));
+    $('btnTorch')?.addEventListener('click', async () => {
+        const on = await toggleTorch();
+        $('btnTorch')?.classList.toggle('is-on', on);
+    });
+    // গ্যালারি
+    const fileInput = $('fileInput');
+    $('btnGallery')?.addEventListener('click', () => fileInput?.click());
+    $('btnGalleryHome')?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', e => {
+        const f = e.target.files?.[0];
+        void onPickFile(f);
+        e.target.value = '';
+    });
+    // ধাপ ৩ এ এখানে মডেল বসবে
+    $('btnUsePhoto')?.addEventListener('click', () => {
+        alert('ছবি গৃহীত। মডেল সংযোজন ধাপ ৩ ও ৫ এ আসছে।');
+    });
+}
+/* ---------------- ভয়েস টগল (ধাপ ৪ এ কাজ করবে) ---------------- */
 let voiceEnabled = true;
-function wireVoiceToggle() {
+function wireVoice() {
     const btn = $('voiceToggle');
     if (!btn)
         return;
@@ -53,23 +113,26 @@ function wireVoiceToggle() {
         voiceEnabled = !voiceEnabled;
         btn.classList.toggle('is-on', voiceEnabled);
         btn.classList.toggle('is-off', !voiceEnabled);
-        console.log('ভয়েস:', voiceEnabled ? 'চালু' : 'বন্ধ');
     });
 }
-/* ---------- আবহাওয়া (এখন স্থির লেখা) ---------- */
 function fillWeatherPlaceholder() {
-    const temp = $('wTemp');
-    const spray = $('wSpray');
-    if (temp)
-        temp.textContent = '২৬° সে';
-    if (spray)
-        spray.textContent = 'উপযুক্ত';
+    const t = $('wTemp');
+    const s = $('wSpray');
+    if (t)
+        t.textContent = '২৬° সে';
+    if (s)
+        s.textContent = 'উপযুক্ত';
 }
-/* ---------- চালু ---------- */
+/* ---------------- চালু ---------------- */
 function init() {
-    wireButtons();
-    wireVoiceToggle();
+    wire();
+    wireVoice();
     fillWeatherPlaceholder();
-    console.log('✅ ধাপ ১ চালু হয়েছে');
+    // ট্যাব লুকালে ক্যামেরা বন্ধ
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden)
+            stopCamera();
+    });
+    console.log('✅ ধাপ ২ চালু হয়েছে');
 }
 document.addEventListener('DOMContentLoaded', init);
