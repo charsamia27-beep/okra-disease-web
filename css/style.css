@@ -451,3 +451,33 @@ body.is-fullscreen .app { max-width: none; }
 .tile__icon { width: 30px; height: 30px; color: var(--green); }
 .step__icon { width: 30px; height: 30px; color: var(--green); margin: 0 auto; }
 .crop__icon svg { width: 30px; height: 30px; }
+
+/* ক্যামেরা লোডিং */
+.cam__loading {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: var(--fs-sm);
+  text-shadow: 0 1px 6px rgba(0,0,0,.8);
+}
+.cam__spinner {
+  width: 38px; height: 38px;
+  border: 4px solid rgba(255,255,255,.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: camspin .8s linear infinite;
+}
+@keyframes camspin { to { transform: rotate(360deg); } }
+
+.cam__shutter:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.cam__error p { margin: 0 0 var(--sp-2); }
+.cam__error .btn { min-height: 48px; font-size: var(--fs-sm); }

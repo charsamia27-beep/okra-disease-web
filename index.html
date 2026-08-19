@@ -168,7 +168,15 @@
 
       <p class="cam__tip">পাতাটি ফ্রেমের ভেতরে ধরুন</p>
 
-      <div class="cam__error hidden" id="camError"></div>
+      <div class="cam__loading" id="camLoading">
+        <span class="cam__spinner"></span>
+        ক্যামেরা চালু হচ্ছে…
+      </div>
+
+      <div class="cam__error hidden" id="camError">
+        <p id="camErrorText"></p>
+        <button class="btn btn--primary" id="btnRetryCam">আবার চেষ্টা করুন</button>
+      </div>
     </div>
 
     <div class="cam__bar">
