@@ -1,0 +1,90 @@
+/* =========================================================
+   টোকেন — সব রঙ, ফন্ট, মাপ এক জায়গায়
+   বদলাতে চাইলে শুধু এই ফাইল বদলাবে
+   ========================================================= */
+
+:root {
+  /* --- রঙ --- */
+  --paper:      #EEF1E4;   /* পেছনের হালকা সবুজাভ */
+  --card:       #FFFFFF;
+  --ink:        #16281B;   /* গাঢ় পাতা-সবুজ, মূল লেখা */
+  --ink-soft:   #5A6B55;   /* হালকা লেখা */
+  --green:      #2E5E33;   /* মূল সবুজ, বাটন */
+  --green-dark: #1E4022;
+  --green-pale: #E4EEDD;   /* সফল/ভালো ব্যানার */
+  --flower:     #F2C230;   /* ঢেঁড়স ফুলের হলুদ — সতর্কতা */
+  --flower-pale:#FBEEDA;
+  --maroon:     #7A2E38;   /* বিপদ, থামো */
+  --maroon-pale:#F5E3E5;
+  --line:       #CFD8BE;   /* বর্ডার */
+
+  /* --- ফন্ট --- */
+  --font-body:    'Hind Siliguri', system-ui, sans-serif;
+  --font-display: 'Baloo Da 2', var(--font-body);
+
+  /* বড় রাখা হয়েছে — ৭০-৮০ বছরের মানুষও যেন পড়তে পারে */
+  --fs-xs:   14px;
+  --fs-sm:   16px;
+  --fs-base: 19px;
+  --fs-lg:   22px;
+  --fs-xl:   28px;
+  --fs-2xl:  34px;
+
+  /* --- ফাঁক --- */
+  --sp-1: 6px;
+  --sp-2: 12px;
+  --sp-3: 18px;
+  --sp-4: 26px;
+  --sp-5: 38px;
+
+  /* --- আকার --- */
+  --radius:      18px;
+  --radius-sm:   12px;
+  --tap-min:     56px;   /* বাটনের সর্বনিম্ন উচ্চতা — বুড়ো আঙুলের জন্য */
+  --shutter:     190px;
+
+  --shadow: 0 2px 0 rgba(22,40,27,.08), 0 10px 24px -14px rgba(22,40,27,.4);
+}
+
+/* --- রিসেট --- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+}
+
+img { display: block; max-width: 100%; }
+
+.hidden { display: none !important; }
+
+/* কি-বোর্ড ব্যবহারকারীর জন্য */
+:focus-visible {
+  outline: 3px solid var(--flower);
+  outline-offset: 3px;
+}
+
+/* যাদের অ্যানিমেশনে সমস্যা হয় */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

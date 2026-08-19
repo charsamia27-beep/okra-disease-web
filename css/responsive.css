@@ -1,0 +1,158 @@
+/* =========================================================
+   রেসপন্সিভ — বড় স্ক্রিনে লেআউট বদলায়
+   মোবাইল আগে, তারপর ট্যাব, তারপর ডেস্কটপ
+   এই ফাইল style.css এর পরে লোড হবে
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   পেছনের জমি — ফাঁকা জায়গা যেন ইচ্ছাকৃত মনে হয়
+   --------------------------------------------------------- */
+body {
+  background:
+    radial-gradient(900px 600px at 10% -5%,  rgba(46,94,51,.14), transparent 60%),
+    radial-gradient(800px 600px at 95% 15%,  rgba(242,194,48,.16), transparent 55%),
+    radial-gradient(700px 700px at 50% 110%, rgba(30,64,34,.16), transparent 60%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* ঢেউ খেলানো হালকা রেখা — মাঠের আভাস */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .5;
+  background-image:
+    repeating-linear-gradient(
+      115deg,
+      transparent 0 22px,
+      rgba(46,94,51,.035) 22px 23px
+    );
+}
+
+/* ---------------------------------------------------------
+   ট্যাব — ৭২০px থেকে
+   --------------------------------------------------------- */
+@media (min-width: 720px) {
+  :root {
+    --fs-base: 20px;
+    --fs-lg:   24px;
+    --fs-xl:   30px;
+    --shutter: 210px;
+  }
+
+  .app {
+    max-width: 720px;
+    margin-top: var(--sp-3);
+    margin-bottom: var(--sp-3);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 24px 60px -30px rgba(22,40,27,.55);
+  }
+
+  .header {
+    padding-top: var(--sp-3);
+    border-radius: 0;
+  }
+
+  /* টাইল ৩টা করে */
+  .tiles { grid-template-columns: repeat(3, 1fr); }
+
+  /* আবহাওয়া ও ফসল পাশাপাশি */
+  .crop { padding-bottom: var(--sp-1); }
+}
+
+/* ---------------------------------------------------------
+   ডেস্কটপ — ১০২৪px থেকে দুই কলাম
+   --------------------------------------------------------- */
+@media (min-width: 1024px) {
+  .app {
+    max-width: 1080px;
+    min-height: auto;
+    margin: var(--sp-4) auto;
+  }
+
+  .screen {
+    padding-bottom: var(--sp-4);
+  }
+
+  /* হোম স্ক্রিন দুই কলামে ভাগ */
+  #screen-home {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    grid-template-rows: auto auto auto auto 1fr;
+    grid-template-areas:
+      "crop    ttl"
+      "weather tools"
+      "main    tools"
+      "main    note"
+      "main    .";
+    gap: 0 var(--sp-4);
+    align-items: start;
+    padding: 0 var(--sp-4) var(--sp-4);
+  }
+
+  #screen-home .crop         { grid-area: crop; }
+  #screen-home .weather      { grid-area: weather; padding: 0; }
+  #screen-home .card         { grid-area: main; margin-bottom: 0; }
+  #screen-home .section-title{ grid-area: ttl; padding: 0; margin: var(--sp-2) 0 var(--sp-2); }
+  #screen-home .tiles        { grid-area: tools; padding: 0; align-self: start; }
+  #screen-home .disclaimer   { grid-area: note; margin: var(--sp-3) 0 0; }
+
+  .tiles { grid-template-columns: 1fr 1fr; }
+
+  .tile { min-height: 128px; }
+
+  /* নিচের নেভ ভাসমান বড়ি হয়ে যায় */
+  .nav {
+    position: sticky;
+    bottom: var(--sp-3);
+    width: 100%;
+    max-width: 400px;
+    margin: var(--sp-4) auto 0;
+    border: 2px solid var(--line);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .nav__item {
+    border-radius: 999px;
+    padding: var(--sp-2) var(--sp-1);
+    min-width: 0;
+  }
+
+  /* বড় স্ক্রিনে শাটার একটু বড় */
+  :root { --shutter: 230px; }
+}
+
+/* ---------------------------------------------------------
+   খুব বড় স্ক্রিন — ১৪৪০px+
+   --------------------------------------------------------- */
+@media (min-width: 1440px) {
+  .app { max-width: 1180px; }
+}
+
+/* ---------------------------------------------------------
+   ছোট ফোন — ৩৬০px এর নিচে
+   --------------------------------------------------------- */
+@media (max-width: 360px) {
+  :root {
+    --fs-base: 17px;
+    --fs-lg:   20px;
+    --shutter: 156px;
+    --sp-3:    14px;
+  }
+  .tiles { gap: 8px; }
+  .tile  { min-height: 94px; font-size: var(--fs-xs); }
+}
+
+/* ---------------------------------------------------------
+   ফোন আড়াআড়ি ধরলে
+   --------------------------------------------------------- */
+@media (max-height: 480px) and (orientation: landscape) {
+  :root { --shutter: 130px; }
+  .steps { display: none; }
+  .hint  { display: none; }
+}
