@@ -17,6 +17,13 @@ import {
   loadTreatments, getDisease, renderResult, toBn, RenderTargets
 } from './result.js';
 
+import {
+  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice,
+  canListen, startListening, stopListening, toggleListening, isListening,
+  setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand,
+  Command
+} from './voice.js';
+
 type ScreenName =
   | 'home' | 'camera' | 'preview' | 'analyzing' | 'confirm' | 'result'
   | 'library' | 'history' | 'me' | 'officer';
@@ -36,6 +43,7 @@ async function goTo(name: ScreenName): Promise<void> {
   if (name !== 'camera' && name !== 'preview') {
     stopCamera($<HTMLVideoElement>('camVideo') ?? undefined);
   }
+  stopSpeaking();
 
   const target = $(`screen-${name}`);
   if (!target) {
@@ -163,7 +171,10 @@ function wire(): void {
 
   $('btnAgain')?.addEventListener('click', () => void goTo('camera'));
   $('btnOfficer')?.addEventListener('click', showOfficer);
-  $('btnSpeak')?.addEventListener('click', () => alert('ভয়েস ধাপ ৪ এ আসছে।'));
+  $('btnSpeak')?.addEventListener('click', () => {
+    if (!canSpeak()) { alert('এই ব্রাউজারে কথা বলার সুবিধা নেই।'); return; }
+    speak(spokenText);
+  });
 
   $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
   $('btnConfirmNo')?.addEventListener('click',  () => onConfirm('no'));
@@ -171,16 +182,111 @@ function wire(): void {
 }
 
 /* ---------------- ভয়েস টগল (ধাপ ৪ এ কাজ করবে) ---------------- */
-let voiceEnabled = true;
 function wireVoice(): void {
   const btn = $('voiceToggle');
   if (!btn) return;
+
+  initVoices();
+
+  if (!canListen()) {
+    // শোনা সম্ভব নয় — বোতাম শুধু বলা চালু/বন্ধ করবে
+    btn.title = 'এই ব্রাউজারে কথা শোনা যায় না';
+  }
+
   btn.classList.add('is-on');
+
   btn.addEventListener('click', () => {
-    voiceEnabled = !voiceEnabled;
-    btn.classList.toggle('is-on', voiceEnabled);
-    btn.classList.toggle('is-off', !voiceEnabled);
+    if (!isVoiceEnabled()) {
+      setVoiceEnabled(true);
+      btn.classList.remove('is-off');
+      btn.classList.add('is-on');
+      speak('ভয়েস চালু হয়েছে।');
+      return;
+    }
+
+    if (canListen()) {
+      toggleListening();
+      if (!isListening()) {
+        setVoiceEnabled(false);
+        btn.classList.remove('is-on', 'is-listening');
+        btn.classList.add('is-off');
+      }
+    } else {
+      setVoiceEnabled(false);
+      btn.classList.remove('is-on');
+      btn.classList.add('is-off');
+    }
   });
+
+  onVoiceState(st => {
+    btn.classList.toggle('is-listening', st === 'listening');
+    btn.classList.toggle('is-speaking',  st === 'speaking');
+  });
+
+  onVoiceCommand(handleCommand);
+}
+
+/* ---------------- ভয়েস কমান্ড ---------------- */
+function currentScreen(): ScreenName {
+  const names: ScreenName[] = ['camera','preview','analyzing','confirm','result','library','history','me','home'];
+  for (const n of names) {
+    if ($(`screen-${n}`) && !$(`screen-${n}`)!.classList.contains('hidden')) return n;
+  }
+  return 'home';
+}
+
+function handleCommand(cmd: Command, raw: string): void {
+  const screen = currentScreen();
+
+  switch (cmd) {
+    case 'stop':
+      stopSpeaking();
+      return;
+
+    case 'capture':
+      if (screen === 'camera') void onShutter();
+      else void goTo('camera');
+      return;
+
+    case 'again':
+      void goTo('camera');
+      return;
+
+    case 'gallery':
+      $<HTMLInputElement>('fileInput')?.click();
+      return;
+
+    case 'read':
+      if (spokenText) speak(spokenText);
+      else speak('এখন পড়ার মতো কিছু নেই।');
+      return;
+
+    case 'officer':
+      speak('কৃষি কল সেন্টারের নম্বর ১৬১২৩। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।');
+      return;
+
+    case 'home':
+      void goTo('home');
+      return;
+
+    case 'help':
+      speak('বলুন — ছবি তোলো, আবার, পড়ো, অথবা থামো।');
+      return;
+
+    case 'yes':
+      if (screen === 'confirm') onConfirm('yes');
+      else if (screen === 'preview') void runAnalysis();
+      return;
+
+    case 'no':
+      if (screen === 'confirm') onConfirm('no');
+      else if (screen === 'preview') void goTo('camera');
+      return;
+
+    default:
+      speak('বুঝতে পারিনি। আবার বলুন।');
+      return;
+  }
 }
 
 function fillWeatherPlaceholder(): void {
@@ -257,10 +363,14 @@ function showConfirm(key: DiseaseKey): void {
     };
   }
 
-  if (q)    q.textContent = `আপনার পাতা কি ${d.bn} এর মতো?`;
+  const question = `আপনার পাতা কি ${d.bn} এর মতো?`;
+  if (q)    q.textContent = question;
   if (hint) hint.textContent = d.lookFor ?? 'দুটি ছবি মিলিয়ে দেখুন।';
 
   void goTo('confirm');
+  if (isVoiceEnabled()) {
+    setTimeout(() => speak(question + ' ' + (d.lookFor ?? '') + ' হ্যাঁ, না, নাকি বুঝতে পারছি না?'), 350);
+  }
 }
 
 function onConfirm(answer: 'yes' | 'no' | 'idk'): void {
@@ -299,9 +409,12 @@ function showResult(confirmedKey?: DiseaseKey): void {
 
   spokenText = renderResult(targets(), currentVerdict, confirmedKey);
   void goTo('result');
+  if (isVoiceEnabled()) setTimeout(() => speak(spokenText), 350);
 }
 
 function showOfficer(): void {
+  const msg = 'কৃষি কল সেন্টার: ' + toBn(16123) + '। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।';
+  speak(msg);
   alert('উপজেলা কৃষি অফিসে যোগাযোগ করুন।\nকৃষি কল সেন্টার: ' + toBn(16123));
 }
 

@@ -4,6 +4,7 @@
 import { startCamera, stopCamera, captureFrame, readFile, hasTorch, toggleTorch, cameraErrorMessage, isRunning } from './camera.js';
 import { predict, decide, nextCandidate, loadModel } from './predict.js';
 import { loadTreatments, getDisease, renderResult, toBn } from './result.js';
+import { initVoices, speak, stopSpeaking, canSpeak, canListen, toggleListening, isListening, setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand } from './voice.js';
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 /* সর্বশেষ তোলা ছবি — ধাপ ৩ এ মডেলে যাবে */
@@ -15,6 +16,7 @@ async function goTo(name) {
     if (name !== 'camera' && name !== 'preview') {
         stopCamera($('camVideo') ?? undefined);
     }
+    stopSpeaking();
     const target = $(`screen-${name}`);
     if (!target) {
         alert(`"${name}" স্ক্রিন এখনো তৈরি হয়নি — পরের ধাপে আসছে।`);
@@ -127,23 +129,114 @@ function wire() {
     $('btnUsePhoto')?.addEventListener('click', () => void runAnalysis());
     $('btnAgain')?.addEventListener('click', () => void goTo('camera'));
     $('btnOfficer')?.addEventListener('click', showOfficer);
-    $('btnSpeak')?.addEventListener('click', () => alert('ভয়েস ধাপ ৪ এ আসছে।'));
+    $('btnSpeak')?.addEventListener('click', () => {
+        if (!canSpeak()) {
+            alert('এই ব্রাউজারে কথা বলার সুবিধা নেই।');
+            return;
+        }
+        speak(spokenText);
+    });
     $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
     $('btnConfirmNo')?.addEventListener('click', () => onConfirm('no'));
     $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
 }
 /* ---------------- ভয়েস টগল (ধাপ ৪ এ কাজ করবে) ---------------- */
-let voiceEnabled = true;
 function wireVoice() {
     const btn = $('voiceToggle');
     if (!btn)
         return;
+    initVoices();
+    if (!canListen()) {
+        // শোনা সম্ভব নয় — বোতাম শুধু বলা চালু/বন্ধ করবে
+        btn.title = 'এই ব্রাউজারে কথা শোনা যায় না';
+    }
     btn.classList.add('is-on');
     btn.addEventListener('click', () => {
-        voiceEnabled = !voiceEnabled;
-        btn.classList.toggle('is-on', voiceEnabled);
-        btn.classList.toggle('is-off', !voiceEnabled);
+        if (!isVoiceEnabled()) {
+            setVoiceEnabled(true);
+            btn.classList.remove('is-off');
+            btn.classList.add('is-on');
+            speak('ভয়েস চালু হয়েছে।');
+            return;
+        }
+        if (canListen()) {
+            toggleListening();
+            if (!isListening()) {
+                setVoiceEnabled(false);
+                btn.classList.remove('is-on', 'is-listening');
+                btn.classList.add('is-off');
+            }
+        }
+        else {
+            setVoiceEnabled(false);
+            btn.classList.remove('is-on');
+            btn.classList.add('is-off');
+        }
     });
+    onVoiceState(st => {
+        btn.classList.toggle('is-listening', st === 'listening');
+        btn.classList.toggle('is-speaking', st === 'speaking');
+    });
+    onVoiceCommand(handleCommand);
+}
+/* ---------------- ভয়েস কমান্ড ---------------- */
+function currentScreen() {
+    const names = ['camera', 'preview', 'analyzing', 'confirm', 'result', 'library', 'history', 'me', 'home'];
+    for (const n of names) {
+        if ($(`screen-${n}`) && !$(`screen-${n}`).classList.contains('hidden'))
+            return n;
+    }
+    return 'home';
+}
+function handleCommand(cmd, raw) {
+    const screen = currentScreen();
+    switch (cmd) {
+        case 'stop':
+            stopSpeaking();
+            return;
+        case 'capture':
+            if (screen === 'camera')
+                void onShutter();
+            else
+                void goTo('camera');
+            return;
+        case 'again':
+            void goTo('camera');
+            return;
+        case 'gallery':
+            $('fileInput')?.click();
+            return;
+        case 'read':
+            if (spokenText)
+                speak(spokenText);
+            else
+                speak('এখন পড়ার মতো কিছু নেই।');
+            return;
+        case 'officer':
+            speak('কৃষি কল সেন্টারের নম্বর ১৬১২৩। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।');
+            return;
+        case 'home':
+            void goTo('home');
+            return;
+        case 'help':
+            speak('বলুন — ছবি তোলো, আবার, পড়ো, অথবা থামো।');
+            return;
+        case 'yes':
+            if (screen === 'confirm')
+                onConfirm('yes');
+            else if (screen === 'preview')
+                void runAnalysis();
+            return;
+        case 'no':
+            if (screen === 'confirm')
+                onConfirm('no');
+            else if (screen === 'preview')
+                void goTo('camera');
+            return;
+        default:
+            speak('বুঝতে পারিনি। আবার বলুন।');
+            return;
+    }
 }
 function fillWeatherPlaceholder() {
     const t = $('wTemp');
@@ -213,11 +306,15 @@ function showConfirm(key) {
             $('confirmRefMissing')?.classList.add('hidden');
         };
     }
+    const question = `আপনার পাতা কি ${d.bn} এর মতো?`;
     if (q)
-        q.textContent = `আপনার পাতা কি ${d.bn} এর মতো?`;
+        q.textContent = question;
     if (hint)
         hint.textContent = d.lookFor ?? 'দুটি ছবি মিলিয়ে দেখুন।';
     void goTo('confirm');
+    if (isVoiceEnabled()) {
+        setTimeout(() => speak(question + ' ' + (d.lookFor ?? '') + ' হ্যাঁ, না, নাকি বুঝতে পারছি না?'), 350);
+    }
 }
 function onConfirm(answer) {
     if (!currentPrediction || !currentVerdict || currentVerdict.kind !== 'confirm')
@@ -252,8 +349,12 @@ function showResult(confirmedKey) {
         img.src = lastShot.dataUrl;
     spokenText = renderResult(targets(), currentVerdict, confirmedKey);
     void goTo('result');
+    if (isVoiceEnabled())
+        setTimeout(() => speak(spokenText), 350);
 }
 function showOfficer() {
+    const msg = 'কৃষি কল সেন্টার: ' + toBn(16123) + '। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।';
+    speak(msg);
     alert('উপজেলা কৃষি অফিসে যোগাযোগ করুন।\nকৃষি কল সেন্টার: ' + toBn(16123));
 }
 /* ---------------- চালু ---------------- */
