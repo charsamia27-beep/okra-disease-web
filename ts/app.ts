@@ -18,7 +18,7 @@ import {
 } from './result.js';
 
 import {
-  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice,
+  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice, getLastHeard,
   canListen, startListening, stopListening, toggleListening, isListening,
   setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand,
   Command
@@ -235,8 +235,25 @@ function currentScreen(): ScreenName {
   return 'home';
 }
 
+function toast(msg: string): void {
+  let el = $('vToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'vToast';
+    el.className = 'vtoast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('is-on');
+  window.clearTimeout((el as any)._t);
+  (el as any)._t = window.setTimeout(() => el!.classList.remove('is-on'), 3500);
+}
+
 function handleCommand(cmd: Command, raw: string): void {
   const screen = currentScreen();
+
+  // যা শোনা গেল তা পর্দায় দেখাও — কোন শব্দ ধরছে বোঝার জন্য
+  toast(raw ? 'শুনলাম: ' + raw : 'কিছু শোনা যায়নি');
 
   switch (cmd) {
     case 'stop':
@@ -284,7 +301,8 @@ function handleCommand(cmd: Command, raw: string): void {
       return;
 
     default:
-      speak('বুঝতে পারিনি। আবার বলুন।');
+      // বারবার না বলে শুধু পর্দায় দেখাও
+      toast('বুঝিনি — "' + (raw || '…') + '"। বলুন: ছবি তোলো / আবার / পড়ো');
       return;
   }
 }

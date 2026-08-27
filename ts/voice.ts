@@ -134,13 +134,15 @@ export function startListening(): void {
     if (!results) return;
 
     // কয়েকটি সম্ভাবনার যেকোনো একটি মিললেই চলবে
+    const heard: string[] = [];
     for (let i = 0; i < results.length; i++) {
       const raw = String(results[i].transcript || '').trim();
+      if (raw) heard.push(raw);
       const cmd = matchCommand(raw);
-      if (cmd) { onCommand?.(cmd, raw); return; }
+      if (cmd) { lastHeard = raw; onCommand?.(cmd, raw); return; }
     }
-    const first = String(results[0].transcript || '').trim();
-    onCommand?.('unknown', first);
+    lastHeard = heard.join(' / ');
+    onCommand?.('unknown', lastHeard);
   };
 
   rec.onerror = (e: any) => {
@@ -194,17 +196,21 @@ export type Command =
   | 'yes' | 'no' | 'unknown';
 
 const PATTERNS: Array<{ cmd: Command; words: string[] }> = [
-  { cmd: 'capture', words: ['ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'তোলো', 'তুলুন', 'ছবি', 'ক্যামেরা'] },
-  { cmd: 'again',   words: ['আবার', 'আরেকটা', 'আরেকটি', 'নতুন ছবি', 'নতুন'] },
-  { cmd: 'read',    words: ['পড়ো', 'পড়ুন', 'শোনাও', 'শোনান', 'বলো', 'বলুন', 'আবার বলো'] },
-  { cmd: 'stop',    words: ['থামো', 'থামুন', 'বন্ধ', 'চুপ'] },
-  { cmd: 'gallery', words: ['গ্যালারি', 'গ্যালারী', 'ছবি বাছাই'] },
-  { cmd: 'help',    words: ['সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'কীভাবে'] },
-  { cmd: 'officer', words: ['অফিসার', 'কৃষি অফিসার', 'নম্বর', 'ফোন'] },
-  { cmd: 'home',    words: ['হোম', 'বাড়ি', 'প্রথম', 'শুরু'] },
-  { cmd: 'yes',     words: ['হ্যাঁ', 'হা', 'হুম', 'ঠিক', 'এমনই', 'মিলে'] },
-  { cmd: 'no',      words: ['না', 'নাহ', 'আলাদা', 'মিলে না'] }
+  { cmd: 'read',    words: ['আবার বলো', 'আবার বলুন', 'পড়ে শোনাও', 'পড়ো', 'পড়ুন', 'পড়', 'শোনাও', 'শোনান', 'শুনতে', 'শুনাও', 'বলো', 'বলুন', 'বল'] },
+  { cmd: 'capture', words: ['ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'ছবি তুল', 'ছবি নাও', 'তোলো', 'তুলুন', 'তুলো', 'ক্যামেরা', 'ছবি'] },
+  { cmd: 'again',   words: ['আরেকটা ছবি', 'আরেকটি ছবি', 'নতুন ছবি', 'আবার তুলুন', 'আরেকটা', 'আরেকটি', 'আবার', 'নতুন'] },
+  { cmd: 'stop',    words: ['থামো', 'থামুন', 'থাম', 'বন্ধ করো', 'বন্ধ', 'চুপ'] },
+  { cmd: 'gallery', words: ['গ্যালারি', 'গ্যালারী', 'গ্যালারি থেকে', 'ছবি বাছাই', 'ফোল্ডার'] },
+  { cmd: 'help',    words: ['সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'কীভাবে', 'কিভাবে', 'বুঝছি না'] },
+  { cmd: 'officer', words: ['কৃষি অফিসার', 'অফিসার', 'নম্বর', 'ফোন', 'কল সেন্টার'] },
+  { cmd: 'home',    words: ['হোম', 'বাড়ি', 'প্রথম পাতা', 'শুরু', 'ফিরে'] },
+  { cmd: 'yes',     words: ['হ্যাঁ', 'হ্যা', 'হা', 'হুম', 'জি', 'ঠিক আছে', 'ঠিক', 'এমনই', 'মিলে যায়', 'মিলেছে'] },
+  { cmd: 'no',      words: ['মিলে না', 'মেলে না', 'আলাদা', 'নাহ', 'না'] }
 ];
+
+/* শেষ যা শোনা গেছে — ডিবাগের জন্য */
+let lastHeard = '';
+export function getLastHeard(): string { return lastHeard; }
 
 export function matchCommand(rawInput: string): Command | null {
   const raw = rawInput.replace(/[।,.!?]/g, ' ').toLowerCase().trim();

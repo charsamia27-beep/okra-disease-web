@@ -708,3 +708,24 @@ body.is-fullscreen .app { max-width: none; }
   50%      { box-shadow: 0 0 0 9px rgba(242,194,48,0); }
 }
 .header__voice.is-speaking { background: rgba(255,255,255,.35); }
+
+
+/* ভয়েস ডিবাগ বার্তা */
+.vtoast {
+  position: fixed;
+  left: 50%; bottom: 96px;
+  transform: translateX(-50%) translateY(14px);
+  max-width: 90vw;
+  background: rgba(20,30,20,.94);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.vtoast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
