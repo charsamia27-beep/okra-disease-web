@@ -4,7 +4,7 @@
 import { startCamera, stopCamera, captureFrame, readFile, hasTorch, toggleTorch, cameraErrorMessage, isRunning } from './camera.js';
 import { predict, decide, nextCandidate, loadModel } from './predict.js';
 import { loadTreatments, getDisease, renderResult, toBn } from './result.js';
-import { initVoices, speak, stopSpeaking, canSpeak, canListen, toggleListening, isListening, setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand } from './voice.js';
+import { initVoices, speak, stopSpeaking, canSpeak, matchSymptom, canListen, toggleListening, isListening, setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand } from './voice.js';
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 /* সর্বশেষ তোলা ছবি — ধাপ ৩ এ মডেলে যাবে */
@@ -234,8 +234,33 @@ function handleCommand(cmd, raw) {
             void goTo('home');
             return;
         case 'help':
-            speak('বলুন — ছবি তোলো, আবার, পড়ো, অথবা থামো।');
+            speak('আপনি পাতার সমস্যা বলতে পারেন, যেমন — পাতায় হলুদ দাগ দেখা যাচ্ছে। অথবা বলুন ছবি তোলো, আবার, পড়ো, থামো।');
             return;
+        case 'greet':
+            speak('আসসালামু আলাইকুম। পাতার সমস্যা বলুন, অথবা বলুন ছবি তোলো।');
+            return;
+        case 'describe': {
+            const g = matchSymptom(raw);
+            if (!g) {
+                speak('বুঝতে পারিনি। আবার বলুন।');
+                return;
+            }
+            const d = getDisease(g.key);
+            if (!d) {
+                speak('বুঝতে পারিনি। আবার বলুন।');
+                return;
+            }
+            if (d.type === 'none') {
+                speak('শুনে মনে হচ্ছে গাছ ভালো আছে। তবু নিশ্চিত হতে একটি ছবি তুলুন।');
+                return;
+            }
+            const cure = d.hasCure === false
+                ? 'এই রোগের ওষুধ নেই। আক্রান্ত গাছ তুলে ফেলুন এবং সাদা মাছি দমন করুন।'
+                : 'করণীয় জানতে ছবি তুলুন।';
+            speak(`আপনি বলেছেন ${g.matched[0]}। এটি ${d.bn} হতে পারে। ${cure} নিশ্চিত হতে একটি পাতার ছবি তুলুন।`);
+            toast(`সম্ভাব্য: ${d.bn} — নিশ্চিত হতে ছবি তুলুন`);
+            return;
+        }
         case 'yes':
             if (screen === 'confirm')
                 onConfirm('yes');

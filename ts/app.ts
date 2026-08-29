@@ -18,7 +18,7 @@ import {
 } from './result.js';
 
 import {
-  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice, getLastHeard,
+  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice, getLastHeard, matchSymptom,
   canListen, startListening, stopListening, toggleListening, isListening,
   setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand,
   Command
@@ -287,8 +287,33 @@ function handleCommand(cmd: Command, raw: string): void {
       return;
 
     case 'help':
-      speak('বলুন — ছবি তোলো, আবার, পড়ো, অথবা থামো।');
+      speak('আপনি পাতার সমস্যা বলতে পারেন, যেমন — পাতায় হলুদ দাগ দেখা যাচ্ছে। অথবা বলুন ছবি তোলো, আবার, পড়ো, থামো।');
       return;
+
+    case 'greet':
+      speak('আসসালামু আলাইকুম। পাতার সমস্যা বলুন, অথবা বলুন ছবি তোলো।');
+      return;
+
+    case 'describe': {
+      const g = matchSymptom(raw);
+      if (!g) { speak('বুঝতে পারিনি। আবার বলুন।'); return; }
+
+      const d = getDisease(g.key as DiseaseKey);
+      if (!d) { speak('বুঝতে পারিনি। আবার বলুন।'); return; }
+
+      if (d.type === 'none') {
+        speak('শুনে মনে হচ্ছে গাছ ভালো আছে। তবু নিশ্চিত হতে একটি ছবি তুলুন।');
+        return;
+      }
+
+      const cure = d.hasCure === false
+        ? 'এই রোগের ওষুধ নেই। আক্রান্ত গাছ তুলে ফেলুন এবং সাদা মাছি দমন করুন।'
+        : 'করণীয় জানতে ছবি তুলুন।';
+
+      speak(`আপনি বলেছেন ${g.matched[0]}। এটি ${d.bn} হতে পারে। ${cure} নিশ্চিত হতে একটি পাতার ছবি তুলুন।`);
+      toast(`সম্ভাব্য: ${d.bn} — নিশ্চিত হতে ছবি তুলুন`);
+      return;
+    }
 
     case 'yes':
       if (screen === 'confirm') onConfirm('yes');
