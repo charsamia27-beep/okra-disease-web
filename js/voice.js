@@ -1,17 +1,28 @@
 /* =========================================================
    বাংলা ভয়েস — কথা বলা (TTS) ও কথা শোনা (STT)
 
-   গুরুত্বপূর্ণ: TTS চলাকালে STT বন্ধ রাখতে হয়,
+   নীতি: এক-চাপ, এক-কথা।
+   মাইক কখনো নিজে থেকে চালু থাকে না। ব্যবহারকারী চাপলে
+   একবার শোনে, উত্তর দেয়, তারপর নিজেই বন্ধ হয়ে যায়।
+
+   কারণ: অবিরাম শোনার মোডে মাঠের বাতাস, গরুর ডাক, পাশের
+   লোকের কথা — সবই কমান্ড হিসেবে ঢুকে পড়ত।
+
+   গুরুত্বপূর্ণ: TTS চলাকালে STT বন্ধ থাকে,
    নাহলে অ্যাপ নিজের কথা শুনে লুপে পড়ে যায়।
    ========================================================= */
 function getSRCtor() {
     const w = window;
     return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
+/* কত সেকেন্ড চুপ থাকলে মাইক ছেড়ে দেবে */
+const LISTEN_TIMEOUT_MS = 7000;
 let enabled = true;
 let state = 'idle';
 let rec = null;
-let wantListening = false; // ব্যবহারকারী শোনা চালু রাখতে চান কি না
+let active = false; // এই মুহূর্তে শুনছে কি না
+let gotResult = false; // এই দফায় কিছু শোনা গেছে কি না
+let timeoutId = 0;
 let bnVoice = null;
 let onStateChange = null;
 let onCommand = null;
@@ -55,8 +66,9 @@ export function speak(text, onDone) {
         onDone?.();
         return;
     }
-    // নিজের কথা যেন নিজে না শোনে
-    const wasListening = wantListening;
+    /* নিজের কথা যেন নিজে না শোনে।
+       এক-চাপ-এক-কথা মোডে বলা শেষে মাইক আর নিজে থেকে ফিরবে না —
+       ব্যবহারকারী আবার চাপলে তবেই শুনবে। */
     stopListening();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
@@ -68,8 +80,6 @@ export function speak(text, onDone) {
     const finish = () => {
         setState('idle');
         onDone?.();
-        if (wasListening)
-            startListening(); // আগে শুনছিল, আবার শুরু করো
     };
     u.onend = finish;
     u.onerror = finish;
@@ -83,13 +93,21 @@ export function stopSpeaking() {
     if (state === 'speaking')
         setState('idle');
 }
-/* ================= কথা শোনা ================= */
-export function startListening() {
+/* ================= কথা শোনা — এক দফা ================= */
+function clearTimer() {
+    if (timeoutId) {
+        window.clearTimeout(timeoutId);
+        timeoutId = 0;
+    }
+}
+/* একবার শোনো, উত্তর দাও, থেমে যাও */
+export function listenOnce() {
     if (!enabled || !canListen())
         return;
+    if (active)
+        return; // ইতিমধ্যে শুনছে
     if (state === 'speaking')
-        return; // বলার সময় শোনা নয়
-    wantListening = true;
+        stopSpeaking(); // বলা থামিয়ে শোনো
     if (rec) {
         try {
             rec.abort();
@@ -100,179 +118,228 @@ export function startListening() {
     const Ctor = getSRCtor();
     rec = new Ctor();
     rec.lang = 'bn-BD';
-    rec.continuous = false;
+    rec.continuous = false; // এক দফা
     rec.interimResults = false;
-    rec.maxAlternatives = 3;
+    rec.maxAlternatives = 5; // ASR-এর কয়েকটা অনুমান পেলে মেলানো সহজ
+    gotResult = false;
     rec.onresult = (e) => {
-        const results = e.results?.[0];
-        if (!results)
+        const alts = e.results?.[0];
+        if (!alts)
             return;
-        // কয়েকটি সম্ভাবনার যেকোনো একটি মিললেই চলবে
+        gotResult = true;
+        /* সব বিকল্প জমাও, তারপর সবচেয়ে ভালো মিল বেছে নাও */
         const heard = [];
-        for (let i = 0; i < results.length; i++) {
-            const raw = String(results[i].transcript || '').trim();
+        for (let i = 0; i < alts.length; i++) {
+            const raw = String(alts[i].transcript || '').trim();
             if (raw)
                 heard.push(raw);
-            const cmd = matchCommand(raw);
-            if (cmd) {
-                lastHeard = raw;
-                onCommand?.(cmd, raw);
-                return;
-            }
         }
-        lastHeard = heard.join(' / ');
-        onCommand?.('unknown', lastHeard);
+        lastHeard = heard[0] ?? '';
+        const hit = bestMatch(heard);
+        if (hit) {
+            lastHeard = hit.raw;
+            finishListening();
+            onCommand?.(hit.cmd, hit.raw);
+        }
+        else {
+            finishListening();
+            onCommand?.('unknown', heard[0] ?? '');
+        }
     };
     rec.onerror = (e) => {
         const err = e?.error;
-        // no-speech / aborted স্বাভাবিক, চুপচাপ আবার শুরু হবে
         if (err === 'not-allowed' || err === 'service-not-allowed') {
-            wantListening = false;
-            setState('idle');
+            finishListening();
+            onCommand?.('denied', '');
+            return;
+        }
+        /* no-speech / audio-capture / network — চুপ করে থাকা যাবে না,
+           ব্যবহারকারী যেন বোঝে কিছু একটা হয়েছে */
+        if (err === 'no-speech') {
+            gotResult = false; // onend ফলব্যাক জানাবে
+            return;
+        }
+        if (err === 'network') {
+            finishListening();
+            onCommand?.('offline', '');
+            return;
         }
     };
     rec.onend = () => {
-        setState('idle');
-        // ব্যবহারকারী বন্ধ না করলে আবার শোনা শুরু
-        if (wantListening && enabled && state !== 'speaking') {
-            setTimeout(() => { if (wantListening)
-                safeStart(); }, 350);
-        }
+        const had = gotResult;
+        finishListening();
+        /* কিছুই শোনা যায়নি — তবুও নীরব থাকা নয় */
+        if (!had)
+            onCommand?.('unknown', '');
     };
-    safeStart();
-}
-function safeStart() {
-    if (!rec)
-        return;
     try {
         rec.start();
+        active = true;
         setState('listening');
+        clearTimer();
+        timeoutId = window.setTimeout(() => {
+            if (active && rec) {
+                try {
+                    rec.abort();
+                }
+                catch { }
+            }
+        }, LISTEN_TIMEOUT_MS);
     }
     catch {
-        // ইতিমধ্যে চালু থাকলে উপেক্ষা করো
+        /* ইতিমধ্যে চালু — উপেক্ষা করো */
+        finishListening();
     }
 }
+function finishListening() {
+    clearTimer();
+    active = false;
+    if (state === 'listening')
+        setState('idle');
+}
+/* পুরনো নাম — এখন এক দফাই চালায় */
+export function startListening() { listenOnce(); }
 export function stopListening() {
-    wantListening = false;
+    clearTimer();
     if (rec) {
         try {
             rec.abort();
         }
         catch { }
     }
+    active = false;
     if (state === 'listening')
         setState('idle');
 }
 export function toggleListening() {
-    if (wantListening)
+    if (active)
         stopListening();
     else
-        startListening();
+        listenOnce();
 }
-export function isListening() { return wantListening; }
+export function isListening() { return active; }
 const PATTERNS = [
-    /* প্রতিটি তালিকায় প্রমিত + আঞ্চলিক রূপ রাখা হয়েছে */
-    { cmd: 'read', words: [
-            'আবার বলো', 'আবার বলুন', 'পড়ে শোনাও', 'পড়ো', 'পড়ুন', 'পড়',
-            'শোনাও', 'শোনান', 'শুনাও', 'শুনাইও', 'শুনাও তো',
-            'বলো', 'বলুন', 'বল', 'কও', 'কন', 'ক', 'কইও', 'কইয়া দেন', 'কইয়া দাও'
-        ] },
-    { cmd: 'capture', words: [
-            'ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'ছবি তুল',
-            'ছবি লও', 'ছবি লন', 'ছবি নাও', 'ছবি নেন', 'ছবি তুলি',
-            'ফটো তোলো', 'ফটো তোল', 'ফটো তুলুন', 'ফটো লও', 'ফটো',
-            'ক্যামেরা', 'ছবি'
-        ] },
-    { cmd: 'again', words: [
-            'আরেকটা ছবি', 'আরেকটি ছবি', 'নতুন ছবি', 'আবার তুলুন',
-            'আরেকটা', 'আরেকটি', 'আরেকখান', 'আরেকখানা',
-            'আবার', 'আরবার', 'ফের', 'ফির', 'নতুন'
-        ] },
-    { cmd: 'stop', words: [
-            'থামো', 'থামুন', 'থাম', 'থামান', 'বন্ধ করো', 'বন্ধ কর', 'বন্ধ করেন',
-            'বন্ধ', 'চুপ', 'রাখো', 'রাখেন'
-        ] },
-    { cmd: 'gallery', words: [
-            'গ্যালারি', 'গ্যালারী', 'গ্যালারি থেকে', 'ছবি বাছাই', 'ফোল্ডার',
-            'আগের ছবি', 'পুরান ছবি'
-        ] },
-    { cmd: 'help', words: [
-            'সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'কি করুম', 'কী করুম',
-            'কীভাবে', 'কিভাবে', 'ক্যামনে', 'কেমনে', 'বুঝছি না', 'বুঝতাছি না'
-        ] },
-    { cmd: 'officer', words: [
-            'কৃষি অফিসার', 'অফিসার', 'অফিসারের', 'নম্বর', 'নাম্বার',
-            'ফোন', 'কল সেন্টার', 'কল করুম'
-        ] },
-    { cmd: 'home', words: [
-            'হোম', 'বাড়ি', 'প্রথম পাতা', 'শুরু', 'ফিরে', 'ফিরা', 'পিছে'
-        ] },
-    { cmd: 'yes', words: [
-            'হ্যাঁ', 'হ্যা', 'হা', 'হ', 'অয়', 'হয়', 'হুম', 'জি', 'জ্বি',
-            'ঠিক আছে', 'আইচ্ছা', 'আচ্ছা', 'ঠিক', 'এমনই', 'এমনেই',
-            'মিলে যায়', 'মিলছে', 'মিলে', 'একরকম'
-        ] },
-    { cmd: 'no', words: [
-            'মিলে না', 'মেলে না', 'মিলে নাই', 'মিলতাছে না',
-            'আলাদা', 'অন্যরকম', 'নাহ', 'নাই', 'না'
-        ] },
-    { cmd: 'greet', words: ['হ্যালো', 'হ্যালো', 'আসসালামু', 'সালাম', 'হাই', 'কেমন আছো', 'কেমন আছেন'] }
+    { cmd: 'read', words: ['আবার বলো', 'আবার বলুন', 'পড়ে শোনাও', 'পড়ো', 'পড়ুন', 'পড়', 'শোনাও', 'শোনান', 'শুনতে', 'শুনাও', 'বলো', 'বলুন', 'বল'] },
+    { cmd: 'capture', words: ['ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'ছবি তুল', 'ছবি নাও', 'তোলো', 'তুলুন', 'তুলো', 'ক্যামেরা', 'ছবি'] },
+    { cmd: 'again', words: ['আরেকটা ছবি', 'আরেকটি ছবি', 'নতুন ছবি', 'আবার তুলুন', 'আরেকটা', 'আরেকটি', 'আবার', 'নতুন'] },
+    { cmd: 'stop', words: ['থামো', 'থামুন', 'থাম', 'বন্ধ করো', 'বন্ধ', 'চুপ'] },
+    { cmd: 'gallery', words: ['গ্যালারি', 'গ্যালারী', 'গ্যালারি থেকে', 'ছবি বাছাই', 'ফোল্ডার'] },
+    { cmd: 'help', words: ['সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'কীভাবে', 'কিভাবে', 'বুঝছি না'] },
+    { cmd: 'officer', words: ['কৃষি অফিসার', 'অফিসার', 'নম্বর', 'ফোন', 'কল সেন্টার'] },
+    { cmd: 'home', words: ['হোম', 'বাড়ি', 'প্রথম পাতা', 'শুরু', 'ফিরে'] },
+    { cmd: 'yes', words: ['হ্যাঁ', 'হ্যা', 'হা', 'হুম', 'জি', 'ঠিক আছে', 'ঠিক', 'এমনই', 'মিলে যায়', 'মিলেছে'] },
+    { cmd: 'no', words: ['মিলে না', 'মেলে না', 'আলাদা', 'নাহ', 'না'] }
 ];
-const SYMPTOM_MAP = [
-    { key: 'yvmv', words: [
-            'হলুদ শিরা', 'শিরা হলুদ', 'শিরা', 'শিরায়', 'জাল', 'জালের মতো', 'মোজাইক',
-            'হলুদ', 'হলদে', 'হইলদা', 'হলদা', 'হইল্দা', 'হলুদা', 'হইলদ্যা',
-            'হলুদ হইয়া', 'হলুদ হয়ে'
-        ] },
-    { key: 'elcv', words: [
-            'কোঁকড়া', 'কুঁকড়ে', 'কুকড়ে', 'কোকড়া', 'কুকরা', 'কুঁচকে', 'কুচকাইয়া',
-            'কুঁচকানো', 'মুচড়াইয়া', 'মুড়ে', 'মোড়ানো',
-            'বেঁকে', 'বাঁকা', 'ব্যাঁকা', 'বাকা', 'দানা', 'কার্ল'
-        ] },
-    { key: 'cercospora', words: [
-            'বাদামি দাগ', 'ধূসর দাগ', 'গোল দাগ', 'কালো দাগ',
-            'ছোপ', 'ছুপ', 'বলয়', 'বাদামি', 'বাদামী', 'ধূসর', 'ছাই রঙ',
-            'দাগ', 'দাক', 'দাগি', 'দাগ পড়ছে', 'দাগ পড়ছে'
-        ] },
-    { key: 'healthy', words: [
-            'ভালো আছে', 'ভাল আছে', 'বালা আছে', 'সুস্থ', 'স্বাভাবিক',
-            'কোনো সমস্যা নেই', 'সমস্যা নাই', 'কুনো সমস্যা নাই', 'ঠিক আছে'
-        ] }
-];
-export function matchSymptom(rawInput) {
-    const raw = rawInput.replace(/[।,.!?]/g, ' ').trim();
-    if (!raw)
-        return null;
-    let best = null;
-    for (const m of SYMPTOM_MAP) {
-        for (const w of m.words) {
-            if (raw.includes(w) && (!best || w.length > best.len)) {
-                best = { key: m.key, len: w.length, word: w };
-            }
-        }
-    }
-    return best ? { key: best.key, matched: [best.word] } : null;
-}
 /* শেষ যা শোনা গেছে — ডিবাগের জন্য */
 let lastHeard = '';
 export function getLastHeard() { return lastHeard; }
-export function matchCommand(rawInput) {
-    const raw = rawInput.replace(/[।,.!?]/g, ' ').toLowerCase().trim();
-    if (!raw)
-        return null;
-    // দীর্ঘতম মিল আগে দেখো, যেন "আবার বলো" আগে "আবার" এর সাথে না মেলে
+/* যেসব ছোট শব্দে আন্দাজ করা বিপজ্জনক — হুবহু মিলতে হবে।
+   "না" আর "হ্যাঁ" ভুল করে মিললে কৃষক ভুল রোগ নিশ্চিত করে ফেলবে। */
+const EXACT_ONLY_MAX_LEN = 3;
+function normalize(s) {
+    return s
+        .replace(/[\u200B-\u200D\uFEFF]/g, '') // অদৃশ্য অক্ষর
+        .replace(/[।,.!?;:'"()\-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .trim();
+}
+/* সম্পাদনা দূরত্ব — ASR এক-দুই অক্ষর এদিক-ওদিক করলে ধরার জন্য */
+function editDistance(a, b, cap) {
+    if (Math.abs(a.length - b.length) > cap)
+        return cap + 1;
+    let prev = new Array(b.length + 1);
+    let cur = new Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++)
+        prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        cur[0] = i;
+        let rowMin = cur[0];
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+            if (cur[j] < rowMin)
+                rowMin = cur[j];
+        }
+        if (rowMin > cap)
+            return cap + 1; // আর দেখে লাভ নেই
+        const t = prev;
+        prev = cur;
+        cur = t;
+    }
+    return prev[b.length];
+}
+/* এক ধাপ: হুবহু অংশ মিল। দীর্ঘতম শব্দ আগে, যেন
+   "আবার বলো" আগে "আবার" এর সাথে না মেলে। */
+function exactMatch(raw) {
+    const tokens = raw.split(' ').filter(Boolean);
     let best = null;
     for (const p of PATTERNS) {
         for (const w of p.words) {
-            if (raw.includes(w) && (!best || w.length > best.len)) {
+            /* ছোট শব্দ আস্ত শব্দ হিসেবেই মিলতে হবে।
+               নইলে "নাকি" এর ভেতরের "না" ধরা পড়ে যায় —
+               আর নিশ্চিতকরণের পর্দায় সেটা ভুল রোগ নিশ্চিত করে দেয়। */
+            const hit = w.length <= EXACT_ONLY_MAX_LEN
+                ? tokens.includes(w)
+                : raw.includes(w);
+            if (hit && (!best || w.length > best.len)) {
                 best = { cmd: p.cmd, len: w.length };
             }
         }
     }
+    return best;
+}
+/* দুই ধাপ: কাছাকাছি মিল। শব্দ ধরে ধরে দূরত্ব মাপা।
+   ছোট শব্দে (হ্যাঁ / না) কখনো আন্দাজ নয়। */
+function fuzzyMatch(raw) {
+    const tokens = raw.split(' ').filter(Boolean);
+    if (tokens.length === 0)
+        return null;
+    let best = null;
+    for (const p of PATTERNS) {
+        for (const w of p.words) {
+            if (w.length <= EXACT_ONLY_MAX_LEN)
+                continue; // ছোট শব্দ বাদ
+            if (w.includes(' '))
+                continue; // বহু-শব্দ আগেই দেখা হয়েছে
+            const cap = w.length <= 5 ? 1 : 2;
+            for (const t of tokens) {
+                const d = editDistance(t, w, cap);
+                if (d > cap)
+                    continue;
+                if (!best || d < best.dist || (d === best.dist && w.length > best.len)) {
+                    best = { cmd: p.cmd, len: w.length, dist: d };
+                }
+            }
+        }
+    }
+    return best ? { cmd: best.cmd, len: best.len } : null;
+}
+export function matchCommand(rawInput) {
+    const raw = normalize(rawInput);
+    if (!raw)
+        return null;
+    return (exactMatch(raw) ?? fuzzyMatch(raw))?.cmd ?? null;
+}
+/* ASR-এর সবগুলো অনুমান দেখে সবচেয়ে ভালো মিল।
+   প্রথম অনুমান ভুল হলেও দ্বিতীয়টা প্রায়ই ঠিক থাকে। */
+function bestMatch(candidates) {
+    let best = null;
+    // আগে সব অনুমানে হুবহু মিল খোঁজো
+    for (const c of candidates) {
+        const hit = exactMatch(normalize(c));
+        if (hit && (!best || hit.len > best.len)) {
+            best = { cmd: hit.cmd, raw: c, len: hit.len };
+        }
+    }
     if (best)
-        return best.cmd;
-    // কমান্ড নয় — লক্ষণের বর্ণনা কি না দেখো
-    if (matchSymptom(raw))
-        return 'describe';
-    return null;
+        return { cmd: best.cmd, raw: best.raw };
+    // না পেলে তবেই কাছাকাছি মিল
+    for (const c of candidates) {
+        const hit = fuzzyMatch(normalize(c));
+        if (hit && (!best || hit.len > best.len)) {
+            best = { cmd: hit.cmd, raw: c, len: hit.len };
+        }
+    }
+    return best ? { cmd: best.cmd, raw: best.raw } : null;
 }

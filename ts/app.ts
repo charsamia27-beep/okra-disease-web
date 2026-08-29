@@ -18,8 +18,8 @@ import {
 } from './result.js';
 
 import {
-  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice, getLastHeard, matchSymptom,
-  canListen, startListening, stopListening, toggleListening, isListening,
+  initVoices, speak, stopSpeaking, canSpeak, hasBanglaVoice, getLastHeard,
+  canListen, listenOnce, stopListening, isListening, getState,
   setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand,
   Command
 } from './voice.js';
@@ -181,41 +181,34 @@ function wire(): void {
   $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
 }
 
-/* ---------------- ভয়েস টগল (ধাপ ৪ এ কাজ করবে) ---------------- */
+/* ---------------- ভয়েস বোতাম — এক চাপ, এক কথা ---------------- */
 function wireVoice(): void {
   const btn = $('voiceToggle');
   if (!btn) return;
 
   initVoices();
-
-  if (!canListen()) {
-    // শোনা সম্ভব নয় — বোতাম শুধু বলা চালু/বন্ধ করবে
-    btn.title = 'এই ব্রাউজারে কথা শোনা যায় না';
-  }
-
+  setVoiceEnabled(true);
   btn.classList.add('is-on');
 
+  btn.title = canListen()
+    ? 'চাপুন, তারপর বলুন'
+    : 'এই ব্রাউজারে কথা শোনা যায় না — চাপলে পড়ে শোনাবে';
+
   btn.addEventListener('click', () => {
-    if (!isVoiceEnabled()) {
-      setVoiceEnabled(true);
-      btn.classList.remove('is-off');
-      btn.classList.add('is-on');
-      speak('ভয়েস চালু হয়েছে।');
+    // পড়ার সময় চাপলে — থামাও
+    if (getState() === 'speaking') { stopSpeaking(); return; }
+
+    // শোনা চলাকালে চাপলে — বাতিল করো
+    if (isListening()) { stopListening(); return; }
+
+    // শোনার সুবিধা নেই — অন্তত পড়ে শোনাও
+    if (!canListen()) {
+      if (spokenText) speak(spokenText);
+      else speak('এই ফোনে কথা শোনা যায় না। নিচের বোতামগুলো ব্যবহার করুন।');
       return;
     }
 
-    if (canListen()) {
-      toggleListening();
-      if (!isListening()) {
-        setVoiceEnabled(false);
-        btn.classList.remove('is-on', 'is-listening');
-        btn.classList.add('is-off');
-      }
-    } else {
-      setVoiceEnabled(false);
-      btn.classList.remove('is-on');
-      btn.classList.add('is-off');
-    }
+    listenOnce();
   });
 
   onVoiceState(st => {
@@ -249,85 +242,102 @@ function toast(msg: string): void {
   (el as any)._t = window.setTimeout(() => el!.classList.remove('is-on'), 3500);
 }
 
+/* প্রতি স্ক্রিনে কী বলা যায় — ফলব্যাকে এটাই শোনানো হয় */
+function hintFor(screen: ScreenName): string {
+  switch (screen) {
+    case 'confirm': return 'বলুন — হ্যাঁ, না, অথবা বুঝতে পারছি না।';
+    case 'result':  return 'বলুন — পড়ো, আরেকটা ছবি, অথবা অফিসার।';
+    case 'preview': return 'বলুন — হ্যাঁ, অথবা আবার।';
+    case 'camera':  return 'বলুন — ছবি তোলো।';
+    default:        return 'বলুন — ছবি তোলো, গ্যালারি, অথবা সাহায্য।';
+  }
+}
+
+/* বুঝতে না পারলে কী করবে।
+   নীরব থাকা নয় — কিন্তু আন্দাজ করাও নয়। */
+function fallback(screen: ScreenName, raw: string): void {
+  const hint = hintFor(screen);
+  const short = raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
+
+  if (short) {
+    toast('শুনলাম: "' + short + '" — বুঝিনি');
+    speak('আপনি বললেন, ' + short + '। এটা বুঝতে পারিনি। ' + hint);
+  } else {
+    toast('কিছু শোনা যায়নি');
+    speak('কিছু শোনা যায়নি। বোতামে চাপ দিয়ে আবার বলুন। ' + hint);
+  }
+}
+
 function handleCommand(cmd: Command, raw: string): void {
   const screen = currentScreen();
 
-  // যা শোনা গেল তা পর্দায় দেখাও — কোন শব্দ ধরছে বোঝার জন্য
-  toast(raw ? 'শুনলাম: ' + raw : 'কিছু শোনা যায়নি');
-
   switch (cmd) {
+    case 'denied':
+      toast('মাইকের অনুমতি নেই');
+      speak('মাইক ব্যবহারের অনুমতি পাওয়া যায়নি। ব্রাউজারের সেটিংসে অনুমতি দিন। অনুমতি ছাড়াও নিচের বোতাম দিয়ে সব কাজ করা যাবে।');
+      return;
+
+    case 'offline':
+      toast('ইন্টারনেট নেই');
+      speak('কথা শোনার জন্য ইন্টারনেট দরকার। এখন নিচের বোতামগুলো ব্যবহার করুন।');
+      return;
+
     case 'stop':
       stopSpeaking();
+      toast('থামলাম');
       return;
 
     case 'capture':
+      toast('শুনলাম: ছবি তোলা');
       if (screen === 'camera') void onShutter();
       else void goTo('camera');
       return;
 
     case 'again':
+      toast('শুনলাম: আরেকটি ছবি');
       void goTo('camera');
       return;
 
     case 'gallery':
+      toast('শুনলাম: গ্যালারি');
       $<HTMLInputElement>('fileInput')?.click();
       return;
 
     case 'read':
-      if (spokenText) speak(spokenText);
-      else speak('এখন পড়ার মতো কিছু নেই।');
+      if (spokenText) { toast('পড়ে শোনাচ্ছি'); speak(spokenText); }
+      else speak('এখন পড়ার মতো কিছু নেই। আগে পাতার ছবি তুলুন।');
       return;
 
     case 'officer':
-      speak('কৃষি কল সেন্টারের নম্বর ১৬১২৩। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।');
+      toast('কৃষি কল সেন্টার');
+      speak('কৃষি কল সেন্টারের নম্বর ' + toBn(16123) + '। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।');
       return;
 
     case 'home':
       void goTo('home');
+      speak('প্রথম পাতায় এলাম।');
       return;
 
     case 'help':
-      speak('আপনি পাতার সমস্যা বলতে পারেন, যেমন — পাতায় হলুদ দাগ দেখা যাচ্ছে। অথবা বলুন ছবি তোলো, আবার, পড়ো, থামো।');
+      speak('বোতামে একবার চাপ দিন, তারপর বলুন। ' + hintFor(screen));
       return;
 
-    case 'greet':
-      speak('আসসালামু আলাইকুম। পাতার সমস্যা বলুন, অথবা বলুন ছবি তোলো।');
-      return;
-
-    case 'describe': {
-      const g = matchSymptom(raw);
-      if (!g) { speak('বুঝতে পারিনি। আবার বলুন।'); return; }
-
-      const d = getDisease(g.key as DiseaseKey);
-      if (!d) { speak('বুঝতে পারিনি। আবার বলুন।'); return; }
-
-      if (d.type === 'none') {
-        speak('শুনে মনে হচ্ছে গাছ ভালো আছে। তবু নিশ্চিত হতে একটি ছবি তুলুন।');
-        return;
-      }
-
-      const cure = d.hasCure === false
-        ? 'এই রোগের ওষুধ নেই। আক্রান্ত গাছ তুলে ফেলুন এবং সাদা মাছি দমন করুন।'
-        : 'করণীয় জানতে ছবি তুলুন।';
-
-      speak(`আপনি বলেছেন ${g.matched[0]}। এটি ${d.bn} হতে পারে। ${cure} নিশ্চিত হতে একটি পাতার ছবি তুলুন।`);
-      toast(`সম্ভাব্য: ${d.bn} — নিশ্চিত হতে ছবি তুলুন`);
-      return;
-    }
-
+    /* হ্যাঁ / না — শুধু যেখানে অর্থ হয় সেখানেই।
+       অন্য পর্দায় আন্দাজ না করে জিজ্ঞেস করাই নিরাপদ। */
     case 'yes':
-      if (screen === 'confirm') onConfirm('yes');
-      else if (screen === 'preview') void runAnalysis();
+      if (screen === 'confirm')      { toast('উত্তর: হ্যাঁ'); onConfirm('yes'); return; }
+      if (screen === 'preview')      { toast('উত্তর: হ্যাঁ'); void runAnalysis(); return; }
+      fallback(screen, raw);
       return;
 
     case 'no':
-      if (screen === 'confirm') onConfirm('no');
-      else if (screen === 'preview') void goTo('camera');
+      if (screen === 'confirm')      { toast('উত্তর: না'); onConfirm('no'); return; }
+      if (screen === 'preview')      { toast('আবার তুলুন'); void goTo('camera'); return; }
+      fallback(screen, raw);
       return;
 
     default:
-      // বারবার না বলে শুধু পর্দায় দেখাও
-      toast('বুঝিনি — "' + (raw || '…') + '"। বলুন: ছবি তোলো / আবার / পড়ো');
+      fallback(screen, raw);
       return;
   }
 }
@@ -412,7 +422,11 @@ function showConfirm(key: DiseaseKey): void {
 
   void goTo('confirm');
   if (isVoiceEnabled()) {
-    setTimeout(() => speak(question + ' ' + (d.lookFor ?? '') + ' হ্যাঁ, না, নাকি বুঝতে পারছি না?'), 350);
+    setTimeout(() => speak(
+      question + ' ' + (d.lookFor ?? '') +
+      ' হ্যাঁ, না, নাকি বুঝতে পারছি না? ' +
+      'মুখে বলতে চাইলে উপরের ভয়েস বোতামে চাপ দিন।'
+    ), 350);
   }
 }
 
