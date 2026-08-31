@@ -4,3 +4,7 @@ node_modules/
 .vscode/
 data/raw_images/
 *.zip
+Pictures/
+*.apk
+*.zip
+*.pt
