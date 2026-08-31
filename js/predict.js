@@ -1,43 +1,42 @@
-/* =========================================================
-   পূর্বাভাস ও সিদ্ধান্ত লজিক
-
-   ধাপ ৫ এ শুধু predict() এর ভেতরটা বদলাবে।
-   থ্রেশহোল্ড ও সিদ্ধান্তের নিয়ম অপরিবর্তিত থাকবে।
-   ========================================================= */
-/* ⚠️ এই ক্রম ট্রেনিং ফোল্ডারের ক্রমের সাথে হুবহু মিলতে হবে।
-   না মিললে মডেল ঠিক চলবে কিন্তু ভুল নাম দেখাবে। */
-export const CLASS_ORDER = ['healthy', 'yvmv', 'elcv', 'cercospora'];
+export const CLASS_ORDER = ['cercospora', 'healthy', 'insect_damage', 'invalid', 'nutrient_deficiency', 'yvmv'];
 /* সিদ্ধান্তের সীমা */
-export const CONF_HIGH = 0.90; // এর উপরে সরাসরি ফলাফল
-export const CONF_LOW = 0.60; // এর নিচে কিছুই দেখাবে না
-export const LEAF_MIN = 0.50; // পাতা কি না
-/* ---------------- মডেল ---------------- */
-let model = null;
+export const CONF_HIGH = 0.97; // এর উপরে সরাসরি ফলাফল
+export const CONF_LOW = 0.70; // এর নিচে কিছুই দেখাবে না
+export const LEAF_MIN = 0.65; // পাতা কি না
+let session = null;
 export async function loadModel() {
-    /*  ধাপ ৫:
-        const tf = await import('...tfjs...');
-        model = await tf.loadGraphModel('model/model.json');            */
-    model = null;
+    session = await ort.InferenceSession.create('model/best.onnx', {
+        executionProviders: ['wasm']
+    });
 }
 export function isModelReady() {
-    return model !== null;
+    return session !== null;
 }
 export async function predict(img) {
-    /*  ধাপ ৫ — আসল কোড এখানে বসবে:
-  
-        const t = tf.browser.fromPixels(img)
-          .resizeBilinear([224, 224]).toFloat().div(255).expandDims(0);
-        const out = await (model as tf.GraphModel).predict(t) as tf.Tensor;
-        const raw = Array.from(await out.data());
-        t.dispose(); out.dispose();
-        return buildPrediction(raw, leafScore);                          */
-    await new Promise(r => setTimeout(r, 900)); // নকল দেরি
-    // নকল স্কোর — বাস্তবের মতো অসম বণ্টন
-    const raw = CLASS_ORDER.map(() => Math.random());
-    const boost = Math.floor(Math.random() * CLASS_ORDER.length);
-    raw[boost] += 1.4 + Math.random() * 2.2;
-    const leaf = Math.random() < 0.12 ? Math.random() * 0.45 : 0.75 + Math.random() * 0.25;
-    return buildPrediction(raw, leaf);
+    const S = 224;
+    const cv = document.createElement('canvas');
+    cv.width = S;
+    cv.height = S;
+    const ctx = cv.getContext('2d');
+    // ছবির কেন্দ্র থেকে বর্গাকার অংশ , পটভূমি বাদ যাবে
+    const side = Math.min(img.width, img.height);
+    const sx = (img.width - side) / 2;
+    const sy = (img.height - side) / 2;
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+    const px = ctx.getImageData(0, 0, S, S).data;
+    const data = new Float32Array(3 * S * S);
+    for (let i = 0; i < S * S; i++) {
+        data[i] = px[i * 4] / 255;
+        data[i + S * S] = px[i * 4 + 1] / 255;
+        data[i + 2 * S * S] = px[i * 4 + 2] / 255;
+    }
+    const feeds = {};
+    feeds[session.inputNames[0]] = new ort.Tensor('float32', data, [1, 3, S, S]);
+    const out = await session.run(feeds);
+    const probs = Array.from(out[session.outputNames[0]].data);
+    const invalidIdx = CLASS_ORDER.indexOf('invalid');
+    const leaf = 1 - probs[invalidIdx];
+    return buildPrediction(probs.map(p => Math.log(Math.max(p, 1e-9))), leaf);
 }
 /* ---------------- সহায়ক ---------------- */
 export function buildPrediction(raw, leaf) {
@@ -63,6 +62,8 @@ function softmax(xs) {
 export function decide(p) {
     if (p.isLeaf < LEAF_MIN)
         return { kind: 'not_leaf' };
+    if (p.top === 'healthy' && p.confidence < 0.92)
+        return { kind: 'confirm', prediction: p, candidate: 'healthy' };
     if (p.confidence < CONF_LOW)
         return { kind: 'too_low', prediction: p };
     if (p.confidence < CONF_HIGH)

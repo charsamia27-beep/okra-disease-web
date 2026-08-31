@@ -8,10 +8,6 @@ import {
   CaptureResult
 } from './camera.js';
 
-import {
-  predict, decide, nextCandidate, loadModel,
-  DiseaseKey, Prediction, Verdict
-} from './predict.js';
 
 import {
   loadTreatments, getDisease, renderResult, toBn, RenderTargets
@@ -23,6 +19,11 @@ import {
   setVoiceEnabled, isVoiceEnabled, onVoiceState, onVoiceCommand,
   Command
 } from './voice.js';
+
+import {
+  predict, decide, nextCandidate, loadModel, CLASS_ORDER,
+  DiseaseKey, Prediction, Verdict
+} from './predict.js';
 
 type ScreenName =
   | 'home' | 'camera' | 'preview' | 'analyzing' | 'confirm' | 'result'
@@ -66,6 +67,8 @@ async function goTo(name: ScreenName): Promise<void> {
 
   window.scrollTo(0, 0);
 
+  if (name === 'library') renderLibrary();
+  if (name === 'history') renderHistory();
   if (name === 'camera') await openCamera();
 }
 
@@ -152,9 +155,19 @@ function wire(): void {
 
   $('btnRetryCam')?.addEventListener('click', () => void openCamera());
 
-  $('btnTorch')?.addEventListener('click', async () => {
+   $('btnTorch')?.addEventListener('click', async () => {
     const on = await toggleTorch();
     $('btnTorch')?.classList.toggle('is-on', on);
+  });
+
+  $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
+  $('btnConfirmNo')?.addEventListener('click',  () => onConfirm('no'));
+  $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
+
+  $('btnClearHist')?.addEventListener('click', () => {
+    if (!confirm('সব স্ক্যান মুছে ফেলবেন?')) return;
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
   });
 
   // গ্যালারি
@@ -179,7 +192,15 @@ function wire(): void {
   $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
   $('btnConfirmNo')?.addEventListener('click',  () => onConfirm('no'));
   $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
+    $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
+
+  $('btnClearHist')?.addEventListener('click', () => {
+    if (!confirm('সব স্ক্যান মুছে ফেলবেন?')) return;
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
+  });
 }
+
 
 /* ---------------- ভয়েস বোতাম — এক চাপ, এক কথা ---------------- */
 function wireVoice(): void {
@@ -342,11 +363,50 @@ function handleCommand(cmd: Command, raw: string): void {
   }
 }
 
-function fillWeatherPlaceholder(): void {
+async function fillWeather(): Promise<void> {
   const t = $('wTemp');
   const s = $('wSpray');
-  if (t) t.textContent = '২৬° সে';
-  if (s) s.textContent = 'উপযুক্ত';
+  if (t) t.textContent = '…';
+  if (s) s.textContent = '…';
+
+  const show = (temp: number, spray: string, ok: boolean) => {
+    if (t) t.textContent = toBn(Math.round(temp)) + '° সে';
+    if (s) {
+      s.textContent = spray;
+      s.classList.toggle('weather__value--ok', ok);
+    }
+  };
+
+  const fetchAt = async (lat: number, lon: number) => {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation` +
+                `&forecast_days=1&timezone=auto`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('weather');
+    const c = (await r.json()).current;
+
+    // স্প্রের উপযুক্ত সময়: বৃষ্টি নেই, বাতাস কম, খুব গরম নয়
+    const rain = c.precipitation > 0.1;
+    const windy = c.wind_speed_10m > 15;
+    const hot = c.temperature_2m > 34;
+
+    const verdict =
+      rain  ? 'বৃষ্টি — এখন নয়' :
+      windy ? 'বাতাস বেশি' :
+      hot   ? 'গরম — বিকেলে দিন' : 'উপযুক্ত';
+
+    show(c.temperature_2m, verdict, !rain && !windy && !hot);
+  };
+
+  const fallback = () => { void fetchAt(23.81, 90.41); };  // ঢাকা
+
+  if (!navigator.geolocation) { fallback(); return; }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => { void fetchAt(pos.coords.latitude, pos.coords.longitude).catch(fallback); },
+    fallback,
+    { timeout: 6000, maximumAge: 900000 }
+  );
 }
 
 
@@ -465,21 +525,28 @@ function showResult(confirmedKey?: DiseaseKey): void {
   if (img && lastShot) img.src = lastShot.dataUrl;
 
   spokenText = renderResult(targets(), currentVerdict, confirmedKey);
+    if (lastShot && currentVerdict.kind === 'sure') {
+    saveScan(confirmedKey ?? currentVerdict.disease, currentVerdict.prediction.confidence, lastShot.dataUrl);
+  }
   void goTo('result');
   if (isVoiceEnabled()) setTimeout(() => speak(spokenText), 350);
 }
 
 function showOfficer(): void {
-  const msg = 'কৃষি কল সেন্টার: ' + toBn(16123) + '। অথবা নিকটস্থ উপজেলা কৃষি অফিসে যান।';
-  speak(msg);
-  alert('উপজেলা কৃষি অফিসে যোগাযোগ করুন।\nকৃষি কল সেন্টার: ' + toBn(16123));
+  void goTo('officer');
+  if (isVoiceEnabled()) {
+    setTimeout(() => speak(
+      'কৃষি কল সেন্টারের নম্বর ' + toBn(16123) +
+      '। অথবা আক্রান্ত পাতাটি নিয়ে নিকটস্থ উপজেলা কৃষি অফিসে যান।'
+    ), 300);
+  }
 }
 
 /* ---------------- চালু ---------------- */
 async function init(): Promise<void> {
   wire();
   wireVoice();
-  fillWeatherPlaceholder();
+  void fillWeather();
 
   try {
     await loadTreatments();
@@ -512,6 +579,132 @@ async function init(): Promise<void> {
   });
 
   console.log('✅ ধাপ ২ চালু হয়েছে');
+}
+
+/* =========================================================
+   রোগের তালিকা
+   ========================================================= */
+function renderLibrary(): void {
+  const box = $('libList');
+  if (!box) return;
+  box.innerHTML = '';
+
+  for (const key of CLASS_ORDER) {
+    if (key === 'invalid') continue;          // এটা রোগ নয়
+    const d = getDisease(key as DiseaseKey);
+    if (!d) continue;
+
+    const btn = document.createElement('button');
+    btn.className = 'lib-item';
+
+    const tone = d.tone ?? 'warn';
+    const tag =
+      tone === 'stop' ? 'ওষুধ নেই' :
+      tone === 'ok'   ? 'সমস্যা নেই' : 'চিকিৎসা আছে';
+
+    btn.innerHTML = `
+      <img class="lib-item__thumb" src="${d.referenceImage}" alt=""
+           onerror="this.style.visibility='hidden'">
+      <span class="lib-item__body">
+        <span class="lib-item__bn">${d.bn}</span>
+        <span class="lib-item__en" style="display:block;">${d.en}</span>
+        <span class="lib-item__tag tag--${tone}">${tag}</span>
+      </span>`;
+
+    btn.addEventListener('click', () => {
+      currentPrediction = null;
+      currentVerdict = null;
+      const imgEl = $<HTMLImageElement>('resultImg');
+      if (imgEl) imgEl.src = d.referenceImage;
+
+      spokenText = renderResult(
+        targets(),
+        { kind: 'sure', prediction: fakePrediction(key as DiseaseKey), disease: key as DiseaseKey },
+        key as DiseaseKey
+      );
+      void goTo('result');
+    });
+
+    box.appendChild(btn);
+  }
+}
+
+/* তালিকা থেকে দেখার সময় ১০০% নিশ্চয়তা ধরা হয় */
+function fakePrediction(key: DiseaseKey): Prediction {
+  const scores = {} as Record<DiseaseKey, number>;
+  CLASS_ORDER.forEach(k => { scores[k as DiseaseKey] = k === key ? 1 : 0; });
+  const rest = CLASS_ORDER.filter(k => k !== key)[0] as DiseaseKey;
+  return { scores, top: key, second: rest, confidence: 1, isLeaf: 1 };
+}
+
+/* =========================================================
+   আমার স্ক্যান
+   ========================================================= */
+interface Scan { key: string; conf: number; at: number; thumb: string; }
+const HIST_KEY = 'okra_scans';
+
+function loadScans(): Scan[] {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY) ?? '[]'); }
+  catch { return []; }
+}
+
+function saveScan(key: DiseaseKey, conf: number, dataUrl: string): void {
+  makeThumb(dataUrl, thumb => {
+    const list = loadScans();
+    list.unshift({ key, conf, at: Date.now(), thumb });
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 12))); }
+    catch { /* জায়গা নেই — সমস্যা নেই */ }
+  });
+}
+
+function makeThumb(dataUrl: string, cb: (t: string) => void): void {
+  const im = new Image();
+  im.onload = () => {
+    const S = 120;
+    const c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    const side = Math.min(im.width, im.height);
+    c.getContext('2d')!.drawImage(
+      im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, S, S
+    );
+    cb(c.toDataURL('image/jpeg', 0.6));
+  };
+  im.onerror = () => cb('');
+  im.src = dataUrl;
+}
+
+function renderHistory(): void {
+  const box = $('histList');
+  if (!box) return;
+
+  const list = loadScans();
+  if (list.length === 0) {
+    box.innerHTML = '<p class="empty">এখনো কোনো স্ক্যান নেই।<br>পাতার ছবি তুললে এখানে জমা হবে।</p>';
+    return;
+  }
+
+  box.innerHTML = '';
+  for (const s of list) {
+    const d = getDisease(s.key as DiseaseKey);
+    const row = document.createElement('div');
+    row.className = 'lib-item';
+    row.innerHTML = `
+      <img class="lib-item__thumb" src="${s.thumb}" alt="">
+      <span class="lib-item__body">
+        <span class="lib-item__bn">${d ? d.bn : 'অজানা'}</span>
+        <span class="lib-item__en" style="display:block;">
+          নিশ্চয়তা ${toBn(Math.round(s.conf * 100))}% · ${dateBn(s.at)}
+        </span>
+      </span>`;
+    box.appendChild(row);
+  }
+}
+
+function dateBn(ms: number): string {
+  const d = new Date(ms);
+  return toBn(d.getDate()) + '/' + toBn(d.getMonth() + 1) + ' · ' +
+         toBn(d.getHours()) + ':' + String(d.getMinutes()).padStart(2, '0')
+           .split('').map(c => toBn(Number(c))).join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => void init());

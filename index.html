@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/responsive.css">
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
 </head>
 <body>
 
@@ -289,6 +290,97 @@
       <p class="disclaimer">
         ⚠️ এটি সহায়ক পরামর্শ, চূড়ান্ত সিদ্ধান্ত নয়।<br>
         <strong>ওষুধ দেওয়ার আগে উপজেলা কৃষি অফিসারের পরামর্শ নিন।</strong>
+      </p>
+    </div>
+  </section>
+
+    <!-- ================= রোগের তালিকা ================= -->
+  <section class="screen hidden" id="screen-library">
+    <div class="container">
+      <h2 class="section-title">রোগের তালিকা</h2>
+      <p class="hint" style="text-align:left;margin:0 0 14px;">
+        যেকোনো রোগে চাপ দিয়ে বিস্তারিত দেখুন।
+      </p>
+      <div id="libList"></div>
+    </div>
+  </section>
+
+  <!-- ================= আমার স্ক্যান ================= -->
+  <section class="screen hidden" id="screen-history">
+    <div class="container">
+      <h2 class="section-title">আমার স্ক্যান</h2>
+      <div id="histList"></div>
+      <button class="btn btn--ghost" id="btnClearHist" style="margin-top:16px;">
+        সব মুছুন
+      </button>
+    </div>
+  </section>
+
+  <!-- ================= কৃষি অফিসার ================= -->
+  <section class="screen hidden" id="screen-officer">
+    <div class="container">
+      <h2 class="section-title">কৃষি অফিসার</h2>
+
+      <div class="card" style="padding:18px;">
+        <p class="eyebrow">কৃষি কল সেন্টার</p>
+        <h2 class="disease" style="margin:4px 0 2px;">১৬১২৩</h2>
+        <p class="disease-en">সকাল ৯টা – বিকাল ৫টা, সরকারি ছুটি ছাড়া</p>
+        <a class="btn btn--primary" href="tel:16123" style="margin-top:14px;display:block;text-align:center;text-decoration:none;">
+          কল করুন
+        </a>
+      </div>
+
+      <div class="card" style="padding:18px;margin-top:14px;">
+        <p class="eyebrow">উপজেলা কৃষি অফিস</p>
+        <h2 class="disease" style="margin:4px 0 8px;font-size:1.3rem;">সরাসরি যোগাযোগ</h2>
+        <div class="block">
+          <ul>
+            <li>আক্রান্ত পাতাটি সাথে নিয়ে যান</li>
+            <li>এই অ্যাপের ফলাফল দেখান</li>
+            <li>ওষুধের নাম ও মাত্রা লিখে আনুন</li>
+            <li>স্প্রের কত দিন পর ফল তোলা নিরাপদ, জেনে নিন</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="disclaimer">
+        ⚠️ এই অ্যাপ কৃষি কর্মকর্তার বিকল্প নয়।<br>
+        <strong>ওষুধ দেওয়ার আগে অবশ্যই পরামর্শ নিন।</strong>
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= আমি ================= -->
+  <section class="screen hidden" id="screen-me">
+    <div class="container">
+      <h2 class="section-title">আমি</h2>
+
+      <div class="card" style="padding:18px;">
+        <p class="eyebrow">অ্যাপ সম্পর্কে</p>
+        <h2 class="disease" style="margin:4px 0 2px;font-size:1.3rem;">ঢেঁড়স রোগ শনাক্তকরণ</h2>
+        <p class="disease-en">সংস্করণ ১.০</p>
+        <div class="block">
+          <ul>
+            <li>ছবি আপনার ফোনেই বিশ্লেষণ হয়, কোথাও পাঠানো হয় না</li>
+            <li>মডেল: YOLOv8n-cls, ৬টি শ্রেণি</li>
+            <li>মোট ছবি: ১,১০৮টি (নিজে সংগ্রহ করা)</li>
+            <li>যাচাই নির্ভুলতা: ৭৬.৭%</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="padding:18px;margin-top:14px;">
+        <p class="eyebrow">ভয়েস</p>
+        <div class="block">
+          <ul>
+            <li>উপরের ডানে মাইক বোতামে একবার চাপ দিন, তারপর বলুন</li>
+            <li>বলতে পারেন — ছবি তোলো, গ্যালারি, পড়ো, অফিসার, সাহায্য</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="disclaimer">
+        ⚠️ এটি একটি সহায়ক অ্যাপ, চূড়ান্ত সিদ্ধান্ত নয়।
       </p>
     </div>
   </section>
