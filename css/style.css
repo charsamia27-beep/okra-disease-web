@@ -729,3 +729,29 @@ body.is-fullscreen .app { max-width: none; }
   transition: opacity .2s ease, transform .2s ease;
 }
 .vtoast.is-on { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* রোগের তালিকা ও স্ক্যান */
+.lib-item{
+  display:flex; gap:12px; align-items:center; width:100%;
+  background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px;
+  padding:12px; margin-bottom:10px; text-align:right; cursor:pointer;
+  font-family:inherit;
+}
+.lib-item:active{ transform:scale(.99); }
+.lib-item__thumb{
+  width:64px; height:64px; border-radius:10px; object-fit:cover;
+  background:#eef2ec; flex:none;
+}
+.lib-item__body{ flex:1; text-align:left; min-width:0; }
+.lib-item__bn{ font-family:'Baloo Da 2',sans-serif; font-weight:700; font-size:1.05rem; color:#1E4022; }
+.lib-item__en{ font-size:.78rem; color:#7b857c; margin-top:1px; }
+.lib-item__tag{
+  display:inline-block; margin-top:5px; font-size:.72rem;
+  padding:2px 9px; border-radius:999px;
+}
+.tag--stop{ background:#fdecec; color:#a12626; }
+.tag--warn{ background:#fdf5e3; color:#8a6413; }
+.tag--ok{   background:#eaf5ec; color:#226b30; }
+.tag--info{ background:#e8f0fe; color:#174ea6; }
+.empty{ text-align:center; color:#8a938b; padding:34px 10px; font-size:.95rem; }
+
+
