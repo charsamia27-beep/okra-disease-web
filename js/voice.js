@@ -131,8 +131,9 @@ export function listenOnce() {
         const heard = [];
         for (let i = 0; i < alts.length; i++) {
             const raw = String(alts[i].transcript || '').trim();
-            if (raw)
-                heard.push(raw);
+            const conf = alts[i].confidence ?? 1;
+            if (raw && conf > 0.35)
+                heard.push(raw); // কম আত্মবিশ্বাসে বিশ্বাস নয়
         }
         lastHeard = heard[0] ?? '';
         const hit = bestMatch(heard);
@@ -219,15 +220,15 @@ export function toggleListening() {
 }
 export function isListening() { return active; }
 const PATTERNS = [
-    { cmd: 'read', words: ['আবার বলো', 'আবার বলুন', 'পড়ে শোনাও', 'পড়ো', 'পড়ুন', 'পড়', 'শোনাও', 'শোনান', 'শুনতে', 'শুনাও', 'বলো', 'বলুন', 'বল'] },
-    { cmd: 'capture', words: ['ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'ছবি তুল', 'ছবি নাও', 'তোলো', 'তুলুন', 'তুলো', 'ক্যামেরা', 'ছবি'] },
-    { cmd: 'again', words: ['আরেকটা ছবি', 'আরেকটি ছবি', 'নতুন ছবি', 'আবার তুলুন', 'আরেকটা', 'আরেকটি', 'আবার', 'নতুন'] },
-    { cmd: 'stop', words: ['থামো', 'থামুন', 'থাম', 'বন্ধ করো', 'বন্ধ', 'চুপ'] },
-    { cmd: 'gallery', words: ['গ্যালারি', 'গ্যালারী', 'গ্যালারি থেকে', 'ছবি বাছাই', 'ফোল্ডার'] },
-    { cmd: 'help', words: ['সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'কীভাবে', 'কিভাবে', 'বুঝছি না'] },
-    { cmd: 'officer', words: ['কৃষি অফিসার', 'অফিসার', 'নম্বর', 'ফোন', 'কল সেন্টার'] },
-    { cmd: 'home', words: ['হোম', 'বাড়ি', 'প্রথম পাতা', 'শুরু', 'ফিরে'] },
-    { cmd: 'yes', words: ['হ্যাঁ', 'হ্যা', 'হা', 'হুম', 'জি', 'ঠিক আছে', 'ঠিক', 'এমনই', 'মিলে যায়', 'মিলেছে'] },
+    { cmd: 'read', words: ['আবার বলো', 'আবার বলুন', 'পড়ে শোনাও', 'পড়ে শোনান', 'পড়ুন', 'শোনাও', 'শোনান'] },
+    { cmd: 'capture', words: ['ছবি তোলো', 'ছবি তোল', 'ছবি তুলুন', 'ছবি তুলো', 'ছবি তুল', 'ছবি নাও', 'ক্যামেরা চালু'] },
+    { cmd: 'again', words: ['আরেকটা ছবি', 'আরেকটি ছবি', 'নতুন ছবি', 'আবার তুলুন', 'আবার তোলো'] },
+    { cmd: 'stop', words: ['থামো', 'থামুন', 'বন্ধ করো', 'চুপ করো'] },
+    { cmd: 'gallery', words: ['গ্যালারি', 'গ্যালারী', 'গ্যালারি থেকে'] },
+    { cmd: 'help', words: ['সাহায্য', 'হেল্প', 'কী করবো', 'কি করবো', 'বুঝছি না'] },
+    { cmd: 'officer', words: ['কৃষি অফিসার', 'অফিসারকে', 'কল সেন্টার'] },
+    { cmd: 'home', words: ['প্রথম পাতা', 'হোমে যাও', 'শুরুতে যাও'] },
+    { cmd: 'yes', words: ['হ্যাঁ', 'হ্যা', 'হা', 'হুম', 'জি', 'ঠিক আছে', 'এমনই', 'মিলে যায়', 'মিলেছে'] },
     { cmd: 'no', words: ['মিলে না', 'মেলে না', 'আলাদা', 'নাহ', 'না'] }
 ];
 /* শেষ যা শোনা গেছে — ডিবাগের জন্য */
@@ -287,6 +288,11 @@ function exactMatch(raw) {
             }
         }
     }
+    /* শোনা কথার তুলনায় মিলটা যেন খুব ছোট না হয়।
+     ফ্যানের শব্দে লম্বা আবর্জনা এলে তার ভেতরে দুই অক্ষর
+     মিলে গেলেই কমান্ড ধরে নেওয়া চলবে না। */
+    if (best && raw.length > 0 && best.len / raw.length < 0.4)
+        return null;
     return best;
 }
 /* দুই ধাপ: কাছাকাছি মিল। শব্দ ধরে ধরে দূরত্ব মাপা।
@@ -298,11 +304,11 @@ function fuzzyMatch(raw) {
     let best = null;
     for (const p of PATTERNS) {
         for (const w of p.words) {
-            if (w.length <= EXACT_ONLY_MAX_LEN)
+            if (w.length <= 5)
                 continue; // ছোট শব্দ বাদ
             if (w.includes(' '))
                 continue; // বহু-শব্দ আগেই দেখা হয়েছে
-            const cap = w.length <= 5 ? 1 : 2;
+            const cap = 1;
             for (const t of tokens) {
                 const d = editDistance(t, w, cap);
                 if (d > cap)
