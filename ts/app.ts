@@ -274,11 +274,30 @@ function hintFor(screen: ScreenName): string {
   }
 }
 
-/* বুঝতে না পারলে কী করবে।
-   নীরব থাকা নয় — কিন্তু আন্দাজ করাও নয়। */
 function fallback(screen: ScreenName, raw: string): void {
   const hint = hintFor(screen);
   const short = raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
+
+  /* লক্ষণের বর্ণনা শুনলে — কমান্ড নয়, কিন্তু কাজের কথা */
+   const symptomWords = ['দাগ', 'হলুদ', 'কোঁকড়া', 'ছিদ্র', 'পাতা', 'শুকিয়ে', 'পোকা', 'সাদা', 'রোগ'];
+  if (short && symptomWords.some(w => short.includes(w))) {
+    toast('লক্ষণ শুনলাম');
+    speak('বুঝেছি। তবে শুধু শুনে রোগ বলা ঠিক হবে না। ' +
+          'ক্যামেরা চালু করছি — পাতাটি হাতে ধরে কাছ থেকে একটি ছবি তুলুন। ' +
+          'আমি দেখে বলছি।', () => {
+      void goTo('camera');
+    });
+    return;
+  }
+  if (short && symptomWords.some(w => short.includes(w))) {
+    toast('লক্ষণ শুনলাম');
+    speak('বুঝেছি। তবে শুধু শুনে রোগ বলা ঠিক হবে না। ' +
+          'ক্যামেরা চালু করছি — পাতাটি হাতে ধরে কাছ থেকে একটি ছবি তুলুন। ' +
+          'আমি দেখে বলছি।', () => {
+      void goTo('camera');
+    });
+    return;
+  }
 
   if (short) {
     toast('শুনলাম: "' + short + '" — বুঝিনি');
