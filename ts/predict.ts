@@ -2,7 +2,7 @@ export const CLASS_ORDER = ['cercospora', 'healthy', 'insect_damage', 'invalid',
 export type DiseaseKey = typeof CLASS_ORDER[number];
 
 /* সিদ্ধান্তের সীমা */
-export const CONF_HIGH = 0.97;  // এর উপরে সরাসরি ফলাফল
+export const CONF_HIGH = 0.90;  // এর উপরে সরাসরি ফলাফল
 export const CONF_LOW  = 0.70;  // এর নিচে কিছুই দেখাবে না
 export const LEAF_MIN  = 0.65;  // পাতা কি না
 
@@ -111,6 +111,6 @@ export function nextCandidate(p: Prediction, rejected: DiseaseKey[]): DiseaseKey
     .sort((a, b) => p.scores[b] - p.scores[a]);
 
   if (left.length === 0) return null;
-  if (p.scores[left[0]] < 0.10) return null;   // এত কম হলে আর জিজ্ঞেস করে লাভ নেই
+  if (p.scores[left[0]] < 0.03) return null;   // এত কম হলে আর জিজ্ঞেস করে লাভ নেই
   return left[0];
 }

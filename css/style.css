@@ -754,4 +754,26 @@ body.is-fullscreen .app { max-width: none; }
 .tag--info{ background:#e8f0fe; color:#174ea6; }
 .empty{ text-align:center; color:#8a938b; padding:34px 10px; font-size:.95rem; }
 
+.scan{
+  background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:14px;
+  padding:12px; margin-bottom:12px;
+}
+.scan__img{
+  width:100%; max-height:180px; object-fit:cover; border-radius:11px;
+  cursor:pointer; transition:max-height .25s ease;
+}
+.scan__img--big{ max-height:520px; }
+.scan__body{ padding-top:10px; }
+.scan__title{
+  font-family:'Baloo Da 2',sans-serif; font-weight:700;
+  font-size:1.1rem; color:#1E4022;
+}
+.scan__en{ font-size:.8rem; color:#7b857c; margin-bottom:8px; }
+.scan__row{
+  display:flex; justify-content:space-between; gap:10px;
+  font-size:.88rem; padding:4px 0; border-top:1px solid rgba(0,0,0,.05);
+}
+.scan__row span{ color:#6b756c; }
+.scan__row b{ color:#1E4022; font-weight:600; text-align:right; }
+
 

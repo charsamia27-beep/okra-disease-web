@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 /* সর্বশেষ তোলা ছবি — ধাপ ৩ এ মডেলে যাবে */
 let lastShot = null;
+let lastSource = 'camera';
 /* ---------------- স্ক্রিন বদল ---------------- */
 async function goTo(name) {
     // প্রিভিউতে ক্যামেরা চালু রাখো — 'আবার তুলুন' তাহলে সাথে সাথে কাজ করে।
@@ -86,6 +87,7 @@ async function onShutter() {
         return;
     try {
         lastShot = await captureFrame(video);
+        lastSource = 'camera';
         showPreview(lastShot.dataUrl);
     }
     catch {
@@ -97,6 +99,7 @@ async function onPickFile(file) {
         return;
     try {
         lastShot = await readFile(file);
+        lastSource = 'gallery';
         showPreview(lastShot.dataUrl);
     }
     catch {
@@ -124,6 +127,13 @@ function wire() {
     $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
     $('btnConfirmNo')?.addEventListener('click', () => onConfirm('no'));
     $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
+    $('btnExportScans')?.addEventListener('click', exportScans);
+    $('btnClearHist')?.addEventListener('click', () => {
+        if (!confirm('সব স্ক্যান মুছে ফেলবেন?'))
+            return;
+        localStorage.removeItem(HIST_KEY);
+        renderHistory();
+    });
     $('btnClearHist')?.addEventListener('click', () => {
         if (!confirm('সব স্ক্যান মুছে ফেলবেন?'))
             return;
@@ -236,15 +246,18 @@ function fallback(screen, raw) {
     /* লক্ষণের বর্ণনা শুনলে — কমান্ড নয়, কিন্তু কাজের কথা */
     const symptomWords = ['দাগ', 'হলুদ', 'কোঁকড়া', 'ছিদ্র', 'পাতা', 'শুকিয়ে', 'পোকা', 'সাদা', 'রোগ'];
     if (short && symptomWords.some(w => short.includes(w))) {
-        toast('লক্ষণ শুনলাম');
-        speak('বুঝেছি। তবে শুধু শুনে রোগ বলা ঠিক হবে না। ' +
-            'ক্যামেরা চালু করছি — পাতাটি হাতে ধরে কাছ থেকে একটি ছবি তুলুন। ' +
-            'আমি দেখে বলছি।', () => {
-            void goTo('camera');
-        });
-        return;
-    }
-    if (short && symptomWords.some(w => short.includes(w))) {
+        if (screen === 'result' && spokenText) {
+            toast('ফলাফল পড়ে শোনাচ্ছি');
+            speak(spokenText);
+            return;
+        }
+        if (screen === 'confirm') {
+            toast('আবার বলছি');
+            speak(($('confirmQ')?.textContent ?? '') + '। ' +
+                ($('confirmHint')?.textContent ?? '') +
+                ' হ্যাঁ, না, নাকি বুঝতে পারছি না?');
+            return;
+        }
         toast('লক্ষণ শুনলাম');
         speak('বুঝেছি। তবে শুধু শুনে রোগ বলা ঠিক হবে না। ' +
             'ক্যামেরা চালু করছি — পাতাটি হাতে ধরে কাছ থেকে একটি ছবি তুলুন। ' +
@@ -278,6 +291,7 @@ function handleCommand(cmd, raw) {
             toast('থামলাম');
             return;
         case 'capture':
+            /* ফলাফলের পাতায় "ছবি তুলুন" মানে নতুন ছবি — ওটা ঠিক আছে */
             toast('শুনলাম: ছবি তোলা');
             if (screen === 'camera')
                 void onShutter();
@@ -357,9 +371,13 @@ async function fillWeather() {
         if (s) {
             s.textContent = spray;
             s.classList.toggle('weather__value--ok', ok);
+            lastWeather.temp = temp;
+            lastWeather.spray = spray;
         }
     };
     const fetchAt = async (lat, lon) => {
+        lastWeather.lat = lat;
+        lastWeather.lon = lon;
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
             `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation` +
             `&forecast_days=1&timezone=auto`;
@@ -487,8 +505,11 @@ function showResult(confirmedKey) {
     if (img && lastShot)
         img.src = lastShot.dataUrl;
     spokenText = renderResult(targets(), currentVerdict, confirmedKey);
-    if (lastShot && currentVerdict.kind === 'sure') {
-        saveScan(confirmedKey ?? currentVerdict.disease, currentVerdict.prediction.confidence, lastShot.dataUrl);
+    if (lastShot && currentVerdict.kind !== 'not_leaf') {
+        const p = currentVerdict.prediction;
+        if (lastShot && (currentVerdict.kind === 'sure' || confirmedKey)) {
+            saveScan(confirmedKey ?? currentVerdict.disease, currentVerdict.prediction.confidence, lastShot.dataUrl, !!confirmedKey);
+        }
     }
     void goTo('result');
     if (isVoiceEnabled())
@@ -585,6 +606,8 @@ function fakePrediction(key) {
     return { scores, top: key, second: rest, confidence: 1, isLeaf: 1 };
 }
 const HIST_KEY = 'okra_scans';
+/* আবহাওয়া ও অবস্থান — fillWeather থেকে জমা হয় */
+let lastWeather = {};
 function loadScans() {
     try {
         return JSON.parse(localStorage.getItem(HIST_KEY) ?? '[]');
@@ -593,26 +616,45 @@ function loadScans() {
         return [];
     }
 }
-function saveScan(key, conf, dataUrl) {
-    makeThumb(dataUrl, thumb => {
-        const list = loadScans();
-        list.unshift({ key, conf, at: Date.now(), thumb });
-        try {
-            localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 12)));
-        }
-        catch { /* জায়গা নেই — সমস্যা নেই */ }
+function saveScan(key, conf, dataUrl, confirmed) {
+    makeThumb(dataUrl, 160, thumb => {
+        makeThumb(dataUrl, 640, full => {
+            const list = loadScans();
+            list.unshift({
+                key, conf, thumb, full,
+                at: Date.now(),
+                lat: lastWeather.lat,
+                lon: lastWeather.lon,
+                temp: lastWeather.temp,
+                spray: lastWeather.spray,
+                device: navigator.userAgent.slice(0, 80),
+                source: lastSource,
+                confirmed
+            });
+            /* জায়গা কম পড়লে পুরনোগুলোর বড় ছবি ফেলে দাও */
+            let keep = list.slice(0, 30);
+            for (let attempt = 0; attempt < 4; attempt++) {
+                try {
+                    localStorage.setItem(HIST_KEY, JSON.stringify(keep));
+                    return;
+                }
+                catch {
+                    keep = keep.slice(0, Math.max(5, keep.length - 8))
+                        .map((s, i) => i > 2 ? { ...s, full: undefined } : s);
+                }
+            }
+        });
     });
 }
-function makeThumb(dataUrl, cb) {
+function makeThumb(dataUrl, size, cb) {
     const im = new Image();
     im.onload = () => {
-        const S = 120;
         const c = document.createElement('canvas');
-        c.width = S;
-        c.height = S;
+        c.width = size;
+        c.height = size;
         const side = Math.min(im.width, im.height);
-        c.getContext('2d').drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, S, S);
-        cb(c.toDataURL('image/jpeg', 0.6));
+        c.getContext('2d').drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, size, size);
+        cb(c.toDataURL('image/jpeg', size > 300 ? 0.75 : 0.6));
     };
     im.onerror = () => cb('');
     im.src = dataUrl;
@@ -627,25 +669,58 @@ function renderHistory() {
         return;
     }
     box.innerHTML = '';
-    for (const s of list) {
+    list.forEach((s, idx) => {
         const d = getDisease(s.key);
-        const row = document.createElement('div');
-        row.className = 'lib-item';
-        row.innerHTML = `
-      <img class="lib-item__thumb" src="${s.thumb}" alt="">
-      <span class="lib-item__body">
-        <span class="lib-item__bn">${d ? d.bn : 'অজানা'}</span>
-        <span class="lib-item__en" style="display:block;">
-          নিশ্চয়তা ${toBn(Math.round(s.conf * 100))}% · ${dateBn(s.at)}
-        </span>
-      </span>`;
-        box.appendChild(row);
-    }
+        const card = document.createElement('div');
+        card.className = 'scan';
+        const rows = [];
+        rows.push(`<div class="scan__row"><span>নিশ্চয়তা</span><b>${toBn(Math.round(s.conf * 100))}%</b></div>`);
+        rows.push(`<div class="scan__row"><span>তারিখ</span><b>${dateBn(s.at)}</b></div>`);
+        rows.push(`<div class="scan__row"><span>সময়</span><b>${timeBn(s.at)}</b></div>`);
+        if (s.temp !== undefined)
+            rows.push(`<div class="scan__row"><span>আবহাওয়া</span><b>${toBn(Math.round(s.temp))}° সে${s.spray ? ' · ' + s.spray : ''}</b></div>`);
+        if (s.lat !== undefined && s.lon !== undefined)
+            rows.push(`<div class="scan__row"><span>অবস্থান</span><b>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}</b></div>`);
+        rows.push(`<div class="scan__row"><span>ছবির উৎস</span><b>${s.source === 'gallery' ? 'গ্যালারি' : 'ক্যামেরা'}</b></div>`);
+        rows.push(`<div class="scan__row"><span>কৃষক নিশ্চিত করেছেন</span><b>${s.confirmed ? 'হ্যাঁ' : 'না'}</b></div>`);
+        card.innerHTML = `
+      <img class="scan__img" src="${s.full || s.thumb}" alt="">
+      <div class="scan__body">
+        <div class="scan__title">${d ? d.bn : 'অজানা'}</div>
+        <div class="scan__en">${d ? d.en : ''}</div>
+        ${rows.join('')}
+      </div>`;
+        /* ছবিতে চাপ দিলে বড় করে দেখাও */
+        const img = card.querySelector('.scan__img');
+        img.addEventListener('click', () => img.classList.toggle('scan__img--big'));
+        box.appendChild(card);
+    });
 }
 function dateBn(ms) {
     const d = new Date(ms);
-    return toBn(d.getDate()) + '/' + toBn(d.getMonth() + 1) + ' · ' +
-        toBn(d.getHours()) + ':' + String(d.getMinutes()).padStart(2, '0')
-        .split('').map(c => toBn(Number(c))).join('');
+    const mon = ['জানু', 'ফেব', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্ট', 'অক্টো', 'নভে', 'ডিসে'];
+    return toBn(d.getDate()) + ' ' + mon[d.getMonth()] + ' ' + toBn(d.getFullYear());
+}
+function timeBn(ms) {
+    const d = new Date(ms);
+    const h = d.getHours();
+    const ampm = h < 12 ? 'সকাল' : h < 16 ? 'দুপুর' : h < 19 ? 'বিকাল' : 'রাত';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const mm = String(d.getMinutes()).padStart(2, '0').split('').map(c => toBn(Number(c))).join('');
+    return ampm + ' ' + toBn(h12) + ':' + mm;
+}
+/* সব স্ক্যান JSON হিসেবে নামাও — পরে মডেল উন্নত করতে কাজে লাগবে */
+function exportScans() {
+    const list = loadScans().map(s => ({ ...s, thumb: undefined, full: undefined }));
+    if (list.length === 0) {
+        alert('রপ্তানি করার মতো কিছু নেই।');
+        return;
+    }
+    const blob = new Blob([JSON.stringify(list, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'okra_scans_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 document.addEventListener('DOMContentLoaded', () => void init());
