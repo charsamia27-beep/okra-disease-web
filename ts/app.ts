@@ -25,6 +25,8 @@ import {
   DiseaseKey, Prediction, Verdict
 } from './predict.js';
 
+import { registerOffline, watchConnection } from './offline.js';
+
 type ScreenName =
   | 'home' | 'camera' | 'preview' | 'analyzing' | 'confirm' | 'result'
   | 'library' | 'history' | 'me' | 'officer';
@@ -175,12 +177,6 @@ function wire(): void {
     renderHistory();
   });
 
-  $('btnClearHist')?.addEventListener('click', () => {
-    if (!confirm('সব স্ক্যান মুছে ফেলবেন?')) return;
-    localStorage.removeItem(HIST_KEY);
-    renderHistory();
-  });
-
   // গ্যালারি
   const fileInput = $<HTMLInputElement>('fileInput');
   $('btnGallery')?.addEventListener('click', () => fileInput?.click());
@@ -205,11 +201,6 @@ function wire(): void {
   $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
     $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
 
-  $('btnClearHist')?.addEventListener('click', () => {
-    if (!confirm('সব স্ক্যান মুছে ফেলবেন?')) return;
-    localStorage.removeItem(HIST_KEY);
-    renderHistory();
-  });
 }
 
 
@@ -240,8 +231,31 @@ function wireVoice(): void {
       return;
     }
 
+    // নেট নেই — শোনার চেষ্টা করে চুপ থাকার চেয়ে আগেই জানাও।
+    // ফলাফল খোলা থাকলে সেটা পড়ে শোনাও (TTS অফলাইনেও চলে)।
+    if (!navigator.onLine) {
+      toast('ইন্টারনেট নেই — কথা শোনা যাবে না');
+      speak(spokenText
+        ? spokenText
+        : 'এখন ইন্টারনেট নেই। কথা বলে নয়, বোতাম চেপে ব্যবহার করুন। ছবি তুলে রোগ দেখা যাবে।');
+      return;
+    }
+
     listenOnce();
   });
+
+  // অফলাইনে মাইক ধূসর, টিপলে কী হবে তা title-এ বলা
+  const markOffline = () => {
+    const off = !navigator.onLine;
+    btn.classList.toggle('is-offline', off);
+    btn.title = off
+      ? 'ইন্টারনেট নেই — চাপলে পড়ে শোনাবে'
+      : canListen() ? 'চাপুন, তারপর বলুন'
+                    : 'এই ব্রাউজারে কথা শোনা যায় না — চাপলে পড়ে শোনাবে';
+  };
+  window.addEventListener('online', markOffline);
+  window.addEventListener('offline', markOffline);
+  markOffline();
 
   onVoiceState(st => {
     btn.classList.toggle('is-listening', st === 'listening');
@@ -416,6 +430,33 @@ async function fillWeather(): Promise<void> {
     }
   };
 
+  /* অফলাইনে শেষ পাওয়া আবহাওয়া দেখাও, সাথে কত আগের তা বলো */
+  const WEATHER_KEY = 'okra_weather_last';
+  const showSaved = (): boolean => {
+    try {
+      const w = JSON.parse(localStorage.getItem(WEATHER_KEY) ?? 'null');
+      if (!w) return false;
+      const hrs = Math.max(0, Math.round((Date.now() - w.at) / 3600000));
+      if (t) t.textContent = toBn(Math.round(w.temp)) + '° সে';
+      lastWeather.temp = w.temp;
+      lastWeather.spray = w.spray;
+      if (s) {
+        s.textContent = hrs < 1 ? w.spray : `${w.spray} (${toBn(hrs)} ঘণ্টা আগের)`;
+        s.classList.toggle('weather__value--ok', w.ok && hrs < 3);
+      }
+      return true;
+    } catch { return false; }
+  };
+  const showNone = () => {
+    if (t) t.textContent = '—';
+    if (s) { s.textContent = 'নেট নেই'; s.classList.remove('weather__value--ok'); }
+  };
+
+  if (!navigator.onLine) {
+    if (!showSaved()) showNone();
+    return;
+  }
+
   const fetchAt = async (lat: number, lon: number) => {
     lastWeather.lat = lat;
     lastWeather.lon = lon;
@@ -436,10 +477,17 @@ async function fillWeather(): Promise<void> {
       windy ? 'বাতাস বেশি' :
       hot   ? 'গরম — বিকেলে দিন' : 'উপযুক্ত';
 
-    show(c.temperature_2m, verdict, !rain && !windy && !hot);
+    const ok = !rain && !windy && !hot;
+    show(c.temperature_2m, verdict, ok);
+    try {
+      localStorage.setItem(WEATHER_KEY, JSON.stringify({
+        temp: c.temperature_2m, spray: verdict, ok, at: Date.now()
+      }));
+    } catch { /* জায়গা না থাকলে বাদ */ }
   };
 
-  const fallback = () => { void fetchAt(23.81, 90.41); };  // ঢাকা
+  const offlineFallback = () => { if (!showSaved()) showNone(); };
+  const fallback = () => { fetchAt(23.81, 90.41).catch(offlineFallback); };  // ঢাকা
 
   if (!navigator.geolocation) { fallback(); return; }
 
@@ -597,12 +645,20 @@ async function init(): Promise<void> {
   wireVoice();
   void fillWeather();
 
+  // নেট ফিরলে আবহাওয়া আবার আনো
+  watchConnection(online => { if (online) void fillWeather(); });
+
   try {
     await loadTreatments();
     await loadModel();
   } catch {
-    alert('রোগের তথ্য লোড করা যায়নি। ইন্টারনেট সংযোগ দেখুন।');
+    alert(navigator.onLine
+      ? 'রোগের তথ্য লোড করা যায়নি। পেজটি আবার খুলুন।'
+      : 'প্রথমবার অ্যাপটি ইন্টারনেট দিয়ে খুলতে হবে। এরপর নেট ছাড়াই চলবে।');
   }
+
+  // মডেল লোডের পর SW চালু করো, যাতে লোড হওয়া সব ফাইল ক্যাশে যায়
+  void registerOffline();
 
   /* ট্যাব লুকালে ক্যামেরা ছেড়ে দাও, ফিরে এলে আবার ধরো।
      না ছাড়লে অন্য ট্যাব/অ্যাপ ক্যামেরা পায় না। */
@@ -827,6 +883,6 @@ function exportScans(): void {
   a.href = URL.createObjectURL(blob);
   a.download = 'okra_scans_' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);  // আগে মুছলে কিছু ফোনে ডাউনলোড হয় না
 }
 document.addEventListener('DOMContentLoaded', () => void init());

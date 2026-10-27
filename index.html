@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#1E4022">
 <title>ঢেঁড়স রোগ শনাক্তকরণ</title>
 
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8C%BF</text></svg>">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,6 +23,11 @@
 <body>
 
 <div class="app">
+
+  <!-- নেট না থাকলে দেখাবে -->
+  <div class="offline-bar hidden" id="offlineBar" role="status">
+    📴 ইন্টারনেট নেই — রোগ নির্ণয় তবুও চলবে
+  </div>
 
   <!-- ================= হেডার ================= -->
   <header class="header" id="appHeader">

@@ -777,3 +777,15 @@ body.is-fullscreen .app { max-width: none; }
 .scan__row b{ color:#1E4022; font-weight:600; text-align:right; }
 
 
+
+/* ---------- অফলাইন ব্যানার ---------- */
+.offline-bar{
+  position: sticky; top: 0; z-index: 50;
+  background: var(--flower-pale); color: var(--ink);
+  border-bottom: 1px solid var(--flower);
+  text-align: center; font-size: var(--fs-sm); font-weight: 600;
+  padding: var(--sp-1) var(--sp-2);
+}
+
+/* অফলাইনে মাইক — শোনা যাবে না, শুধু পড়ে শোনাবে */
+.header__voice.is-offline { opacity: .45; filter: grayscale(1); }
