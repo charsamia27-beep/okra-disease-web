@@ -154,10 +154,6 @@ function wire() {
         }
         speak(spokenText);
     });
-    $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
-    $('btnConfirmNo')?.addEventListener('click', () => onConfirm('no'));
-    $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
-    $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
 }
 /* ---------------- ভয়েস বোতাম — এক চাপ, এক কথা ---------------- */
 function wireVoice() {

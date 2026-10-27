@@ -6,7 +6,7 @@
    নতুন কোড push করলে VERSION বাড়াও, নাহলে পুরনো ক্যাশ থেকে যাবে।
    ========================================================= */
 
-const VERSION   = 'okra-v1';
+const VERSION   = 'okra-v2';
 const SHELL     = VERSION + '-shell';    // নিজের ফাইল
 const RUNTIME   = VERSION + '-runtime';  // CDN (ORT, ফন্ট)
 

@@ -195,12 +195,6 @@ function wire(): void {
     if (!canSpeak()) { alert('এই ব্রাউজারে কথা বলার সুবিধা নেই।'); return; }
     speak(spokenText);
   });
-
-  $('btnConfirmYes')?.addEventListener('click', () => onConfirm('yes'));
-  $('btnConfirmNo')?.addEventListener('click',  () => onConfirm('no'));
-  $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
-    $('btnConfirmIdk')?.addEventListener('click', () => onConfirm('idk'));
-
 }
 
 
